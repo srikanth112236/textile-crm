@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { getApiUrl } from '../utils/api';
 import { Shirt, Building2, User, Mail, Phone, MapPin, Tag, ShieldCheck, CheckCircle2, AlertCircle, ArrowRight, Key } from 'lucide-react';
 
 export const RegisterAdmin: React.FC = () => {
@@ -33,7 +34,7 @@ export const RegisterAdmin: React.FC = () => {
     setLoading(true);
 
     try {
-      const res = await fetch('/api/auth/register-company', {
+      const res = await fetch(getApiUrl('/api/auth/register-company'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),

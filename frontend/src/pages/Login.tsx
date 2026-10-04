@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { getApiUrl } from '../utils/api';
 import { Shirt, Lock, Mail, Eye, EyeOff, AlertCircle, CheckCircle2, ShieldCheck, UserCheck, KeyRound } from 'lucide-react';
 
 export const Login: React.FC = () => {
@@ -44,7 +45,7 @@ export const Login: React.FC = () => {
     setLoading(true);
 
     try {
-      const res = await fetch('/api/auth/login', {
+      const res = await fetch(getApiUrl('/api/auth/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),

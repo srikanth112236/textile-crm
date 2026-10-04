@@ -1,9 +1,12 @@
 // API Base URL helper for Frontend
-// If VITE_API_URL is set in Render environment, it uses that; otherwise falls back to relative /api URL
+// Automatically points to VITE_API_URL if configured, or default Render backend URL when hosted on Render static site
 
-export const API_BASE_URL = import.meta.env.VITE_API_URL 
-  ? import.meta.env.VITE_API_URL.replace(/\/$/, '') 
-  : '';
+export const API_BASE_URL =
+  import.meta.env.VITE_API_URL
+    ? import.meta.env.VITE_API_URL.replace(/\/$/, '')
+    : typeof window !== 'undefined' && window.location.hostname.includes('onrender.com') && window.location.hostname.includes('frontend')
+      ? 'https://textile-crm-backend.onrender.com'
+      : '';
 
 export const getApiUrl = (endpoint: string): string => {
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;

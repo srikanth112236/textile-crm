@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { getApiUrl } from '../utils/api';
 import { KeyRound, ShieldAlert, CheckCircle, Lock } from 'lucide-react';
 
 export const ForceChangePassword: React.FC = () => {
@@ -29,7 +30,7 @@ export const ForceChangePassword: React.FC = () => {
     setLoading(true);
 
     try {
-      const res = await fetch('/api/auth/change-password', {
+      const res = await fetch(getApiUrl('/api/auth/change-password'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
