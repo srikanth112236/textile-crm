@@ -1,0 +1,22 @@
+# Render Blueprint configuration for Textile CRM Enterprise
+# Render URL: https://render.com
+
+services:
+  # Fullstack Web Service (Express API + React Frontend served via Node.js)
+  - type: web
+    name: textile-crm
+    env: node
+    plan: free
+    region: singapore # Options: oregon, frankfurt, singapore, ohio
+    buildCommand: npm run build
+    startCommand: npm start
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: MONGO_URI
+        sync: false # Set your MongoDB Atlas URI in the Render Dashboard
+      - key: JWT_SECRET
+        generateValue: true
