@@ -286,7 +286,7 @@ export const shiprocketWebhook = async (req: Request, res: Response): Promise<vo
         if (order.status === OrderStatus.DELIVERED) {
           notifyOrderWhatsApp(buyer.phone, 'delivered', { orderNumber: order.orderNumber }).catch(() => {});
         } else if (order.status === OrderStatus.OUT_FOR_DELIVERY) {
-          const trackUrl = `${process.env.FRONTEND_URL || 'http://localhost:3001'}/track-order`;
+          const trackUrl = `${process.env.FRONTEND_URL || 'https://textile-crm-frontend.onrender.com'}/track-order`;
           notifyOrderWhatsApp(buyer.phone, 'out_for_delivery', { orderNumber: order.orderNumber, trackUrl }).catch(() => {});
         }
       }

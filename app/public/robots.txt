@@ -10,7 +10,7 @@ Disallow: /cart
 Disallow: /wishlist
 
 # Host
-Host: https://yourdomain.com
+Host: https://textile-crm-frontend.onrender.com
 
 # Sitemaps
-Sitemap: https://yourdomain.com/sitemap.xml
+Sitemap: https://textile-crm-frontend.onrender.com/sitemap.xml

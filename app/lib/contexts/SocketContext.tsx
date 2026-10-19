@@ -25,7 +25,7 @@ export interface Notification {
 }
 
 const SocketContext = createContext<SocketContextType | undefined>(undefined);
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://textile-crm-backend.onrender.com';
 
 // Backend emits (server/src/config/socket.ts + controllers):
 // paymentConfirmed, paymentReceived, orderShipped, trackingUpdated,

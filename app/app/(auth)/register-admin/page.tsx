@@ -48,7 +48,7 @@ export default function RegisterAdminPage() {
       const recaptchaToken = await getRecaptchaToken();
       
       // Call registration API with role and secret
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/auth/register`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://textile-crm-backend.onrender.com'}/api/auth/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -2,6 +2,7 @@ import { Server as HTTPServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
 import redisClient from './redis';
+import { allowedOrigins } from './origins';
 
 let io: SocketIOServer | null = null;
 
@@ -12,7 +13,7 @@ export const initializeSocket = (httpServer: HTTPServer): SocketIOServer => {
 
   io = new SocketIOServer(httpServer, {
     cors: {
-      origin: process.env.FRONTEND_URL || 'http://localhost:3001',
+      origin: allowedOrigins,
       methods: ['GET', 'POST'],
       credentials: true,
     },

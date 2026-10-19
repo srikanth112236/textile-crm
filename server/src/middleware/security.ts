@@ -2,6 +2,7 @@ import helmet from 'helmet';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import { Request, Response, NextFunction } from 'express';
+import { corsOrigin } from '../config/origins';
 
 // Helmet configuration for security headers
 export const helmetMiddleware = helmet({
@@ -10,7 +11,7 @@ export const helmetMiddleware = helmet({
       defaultSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
       scriptSrc: ["'self'"],
-      imgSrc: ["'self'", 'data:', 'https:', 'http://localhost:5000'],
+      imgSrc: ["'self'", 'data:', 'https:', 'http://localhost:5000', 'https://textile-crm-backend.onrender.com'],
     },
   },
   crossOriginEmbedderPolicy: false,
@@ -18,7 +19,7 @@ export const helmetMiddleware = helmet({
 
 // CORS configuration
 export const corsMiddleware = cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3001',
+  origin: corsOrigin,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],

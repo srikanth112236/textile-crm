@@ -44,7 +44,7 @@ export const uploadAvatar = async (
     
     // Generate URL for the uploaded image
     // In production, this should be a CDN URL or static file server URL
-    const baseUrl = process.env.API_URL || 'http://localhost:5000';
+    const baseUrl = process.env.API_URL || process.env.API_BASE_URL || 'https://textile-crm-backend.onrender.com';
     const imageUrl = `${baseUrl}/uploads/avatars/${filename}`;
 
     // If user has an existing avatar, delete it
@@ -87,7 +87,7 @@ export const uploadProductImage = async (
     }
 
     // Generate URL for the uploaded image
-    const baseUrl = process.env.API_URL || 'http://localhost:5000';
+    const baseUrl = process.env.API_URL || process.env.API_BASE_URL || 'https://textile-crm-backend.onrender.com';
     const imageUrl = `${baseUrl}/uploads/products/${req.file.filename}`;
 
     res.status(200).json({
@@ -121,7 +121,7 @@ export const uploadReviewPhoto = async (
     }
 
     // Generate URL for the uploaded image
-    const baseUrl = process.env.API_URL || 'http://localhost:5000';
+    const baseUrl = process.env.API_URL || process.env.API_BASE_URL || 'https://textile-crm-backend.onrender.com';
     const imageUrl = `${baseUrl}/uploads/products/${req.file.filename}`;
 
     res.status(200).json({

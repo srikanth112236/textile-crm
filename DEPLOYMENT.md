@@ -1,123 +1,232 @@
-# E-Commerce Deployment on Render
+# Deployment — Textile CRM / Mentoos storefront on Render
 
-## Overview
+## Live URLs
 
-This deployment uses Render with Docker containers:
-- **Backend**: Express.js API on Render Web Service
-- **Frontend**: Next.js on Render Web Service
-- **Database**: MongoDB Atlas (or Render MongoDB)
-- **Cache**: Redis (Render Redis or Upstash)
+| Service | URL | Runtime |
+|---------|-----|---------|
+| Frontend (Next.js) | https://textile-crm-frontend.onrender.com | Docker — `frontend.Dockerfile` |
+| Backend (Express + Socket.IO) | https://textile-crm-backend.onrender.com | Docker — `backend.Dockerfile` |
+| Repo | https://github.com/srikanth112236/textile-crm | branch `main` |
 
-## Prerequisites
+Health check: https://textile-crm-backend.onrender.com/api/health
 
-1. Render account: https://render.com
-2. MongoDB Atlas cluster: https://mongodb.com/atlas
-3. GitHub repository with this code
+## Repository layout (why the Dockerfiles are at the root)
 
-## Step 1: Push to GitHub
+```
+ecom/
+├── app/                  # Next.js frontend
+├── server/               # Express + Socket.IO backend
+├── frontend.Dockerfile   # builds app/   (context = repo root)
+├── backend.Dockerfile    # builds server/ (context = repo root)
+├── render.yaml           # Render Blueprint
+└── docker-compose.yml    # local development
+```
+
+Both Dockerfiles use the **repository root as the build context** and copy the
+`app/` or `server/` subfolder in. That means the Render services must be
+configured with `dockerContext: .` (the default) — not with a root directory of
+`app/` or `server/`.
+
+---
+
+## ⚠️ Read this first: the existing Render services run a DIFFERENT app
+
+At the time of writing, both live URLs still serve the old **Textile ERP**
+application (the backend answers `/api/health` with
+`"Textile ERP Enterprise Backend Server is running!"`, and the frontend serves a
+Vite SPA). Those services were created from the previous contents of this repo.
+
+Pushing this code does **not** automatically make them run this storefront,
+because their build/runtime settings still point at the old app. Choose one:
+
+### Option A — Recreate from the Blueprint (recommended)
+
+1. Render Dashboard → **New +** → **Blueprint**
+2. Select `srikanth112236/textile-crm` (Render reads `render.yaml`)
+3. Render prompts for every `sync: false` secret (see the table below)
+4. Delete the two old services (this also frees the `textile-crm-*` names,
+   which are required for the URLs above)
+
+### Option B — Reconfigure the two existing services
+
+For **each** service: Settings → change to these values, then Manual Deploy →
+Clear build cache & deploy.
+
+| Setting | Backend (`textile-crm-backend`) | Frontend (`textile-crm-frontend`) |
+|---------|--------------------------------|-----------------------------------|
+| Language / Runtime | **Docker** | **Docker** |
+| Dockerfile Path | `./backend.Dockerfile` | `./frontend.Dockerfile` |
+| Docker Build Context Directory | `.` (repo root) | `.` (repo root) |
+| Health Check Path | `/api/health` | *(leave empty — `/`)* |
+| Start Command | *(none — from the Dockerfile)* | *(none)* |
+| **PORT** env var | **delete it** | **delete it** |
+
+> **Why delete `PORT`?** Render injects its own `PORT` and routes traffic to it.
+> Overriding it with `5000` makes the service listen on the wrong port and the
+> deploy fails with "no open ports detected". Both apps read `process.env.PORT`
+> (`next start` honours it automatically; the API falls back to 5000 only when
+> it is unset).
+
+---
+
+## Environment variables
+
+### Backend — `textile-crm-backend`
+
+| Variable | Value | Notes |
+|----------|-------|-------|
+| `NODE_ENV` | `production` | |
+| `MONGODB_URI` | `mongodb+srv://…` | **Required.** MongoDB Atlas connection string |
+| `FRONTEND_URL` | `https://textile-crm-frontend.onrender.com` | CORS + email links. Comma-separate to allow more origins |
+| `API_BASE_URL` | `https://textile-crm-backend.onrender.com` | Base URL for uploaded-image links |
+| `HTTPS_ENABLED` | `false` | Render terminates TLS at the edge; `true` breaks internal health checks |
+| `JWT_SECRET` | *(generate)* | Render can generate it (`generateValue`) |
+| `JWT_ACCESS_EXPIRY` | `15m` | |
+| `JWT_REFRESH_EXPIRY` | `7d` | |
+| `MFA_ISSUER` | `E-Commerce Platform` | Shown in authenticator apps |
+| `ADMIN_REGISTRATION_SECRET` | `<secret>` | Needed to register admins |
+| `SUPERADMIN_EMAIL` / `SUPERADMIN_PASSWORD` | `<credentials>` | Seeded superadmin |
+| `RECAPTCHA_SECRET_KEY` | `<key>` | Server-side reCAPTCHA verification |
+| `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | `<keys>` | Payments |
+| `RAZORPAY_WEBHOOK_SECRET` | `<secret>` | Webhook signature check |
+| `SHIPROCKET_EMAIL` / `SHIPROCKET_PASSWORD` / `SHIPROCKET_PICKUP_LOCATION` | `<values>` | Shipments |
+| `REDIS_HOST` / `REDIS_PORT` / `REDIS_PASSWORD` | *(optional)* | Leave blank to run without a cache |
+
+Optional: `SMTP_*` (email), `MSG91_*` (SMS), `INSTAGRAM_*` (feed),
+`PAYMENT_SWEEP_ENABLED`, `SHIPROCKET_SYNC_ENABLED`.
+
+### Frontend — `textile-crm-frontend`
+
+| Variable | Value | Notes |
+|----------|-------|-------|
+| `NODE_ENV` | `production` | |
+| `NEXT_PUBLIC_API_URL` | `https://textile-crm-backend.onrender.com` | **Build-time.** Baked into the browser bundle (see below) |
+| `NEXTAUTH_URL` | `https://textile-crm-frontend.onrender.com` | |
+| `NEXTAUTH_SECRET` | *(generate)* | Encrypts the NextAuth session cookie |
+| `NEXT_PUBLIC_RECAPTCHA_SITE_KEY` | `<site key>` | Note the `NEXT_PUBLIC_` prefix |
+| `SITE_URL` | `https://textile-crm-frontend.onrender.com` | Sitemap/robots generation |
+| `NEXT_PUBLIC_GA_ID`, `NEXT_PUBLIC_META_PIXEL_ID`, `NEXT_PUBLIC_GSC_VERIFICATION` | *(optional)* | Analytics / Search Console |
+
+> **Build-time vs runtime.** Next.js inlines `NEXT_PUBLIC_*` variables into the
+> JavaScript bundle during `next build`, so `NEXT_PUBLIC_API_URL` must be present
+> **when the image is built**. `frontend.Dockerfile` declares it with `ARG`, which
+> is how Render forwards service env vars into a Docker build. As a safety net the
+> code also falls back to `https://textile-crm-backend.onrender.com` when the
+> variable is missing, so a client build can never silently point at localhost.
+
+---
+
+## Database — MongoDB Atlas
+
+1. Create a free cluster at https://mongodb.com/atlas
+2. Database Access → add a user
+3. Network Access → allow `0.0.0.0/0` (Render's egress IPs are not static on
+   free plans)
+4. Copy the connection string into `MONGODB_URI`:
+   `mongodb+srv://user:pass@cluster0.xxxxx.mongodb.net/ecom?retryWrites=true&w=majority`
+
+## Redis (optional)
+
+The API logs `Redis connection failed … starting without Redis cache` and
+continues. Add a Key Value / Redis instance only if you need caching or run more
+than one backend instance (Socket.IO needs the Redis adapter to fan out messages
+across instances). Note the free Render Redis plan is not reachable from Render
+web services — use a paid Key Value instance or Upstash.
+
+## First-run data (admin user, categories, settings)
+
+Run these once against Atlas from your machine (with `MONGODB_URI` pointing at
+Atlas in `server/.env`):
 
 ```bash
-git add .
-git commit -m "Prepare for Render deployment"
+cd server
+npm run seed:superadmin
+npm run seed:settings
+npm run seed:categories
+npm run seed:products      # optional demo catalog
+```
+
+---
+
+## Deploy
+
+```bash
+git add -A
+git commit -m "…"
 git push origin main
 ```
 
-## Step 2: Create MongoDB Database
+Render auto-deploys on push when **Auto-Deploy** is set to *Yes* (see
+`autoDeploy: true` in `render.yaml`). Otherwise use **Manual Deploy → Deploy
+latest commit**.
 
-1. Create a free cluster at MongoDB Atlas
-2. Get your connection string: `mongodb+srv://user:pass@cluster.mongodb.net/ecom?retryWrites=true&w=majority`
-3. Add your Render IP to Atlas network access (or allow 0.0.0.0/0)
+## Verify the deployment
 
-## Step 3: Create Redis (Optional)
+```bash
+# 1. API is alive and connected to Mongo
+curl https://textile-crm-backend.onrender.com/api/health
 
-1. Create a Redis instance on Render or use Upstash
-2. Get the connection details
+# 2. Products and filters return data (this was the 404 report)
+curl "https://textile-crm-backend.onrender.com/api/products?limit=1"
+curl "https://textile-crm-backend.onrender.com/api/products/filters"
+curl https://textile-crm-backend.onrender.com/api/categories
 
-## Step 4: Deploy via render.yaml
+# 3. Socket.IO handshake answers (should return a session id string)
+curl "https://textile-crm-backend.onrender.com/socket.io/?EIO=4&transport=polling"
 
-1. Connect your GitHub repo to Render
-2. Use the `render.yaml` blueprint:
-   - Go to Render Dashboard → Blueprints → Connect repo
-   - Select `render.yaml`
-   - Render will create both services automatically
+# 4. Frontend renders the storefront (Next.js output, not an SPA shell)
+curl -I https://textile-crm-frontend.onrender.com
+```
 
-## Step 5: Set Environment Variables
+In the browser: the homepage hero must crossfade between three slides every 6
+seconds with a slow zoom, and DevTools → Console must be free of CORS/404 errors.
 
-### Backend Service (ecom-backend)
-Set these in Render Dashboard → Backend → Environment:
+---
 
-| Variable | Value |
-|----------|-------|
-| `NODE_ENV` | `production` |
-| `PORT` | `5000` |
-| `MONGODB_URI` | Your MongoDB Atlas connection string |
-| `REDIS_HOST` | Your Redis host |
-| `REDIS_PORT` | `6379` |
-| `REDIS_PASSWORD` | Your Redis password |
-| `JWT_SECRET` | Generate a strong random string |
-| `FRONTEND_URL` | `https://ecom-frontend.onrender.com` |
-| `RECAPTCHA_SECRET_KEY` | Your reCAPTCHA secret key |
-| `HTTPS_ENABLED` | `true` |
-| `RAZORPAY_KEY_ID` | Your Razorpay key ID |
-| `RAZORPAY_KEY_SECRET` | Your Razorpay key secret |
+## Known limitations
 
-### Frontend Service (ecom-frontend)
-Set these in Render Dashboard → Frontend → Environment:
-
-| Variable | Value |
-|----------|-------|
-| `NODE_ENV` | `production` |
-| `NEXT_PUBLIC_API_URL` | `https://ecom-backend.onrender.com` |
-| `NEXTAUTH_SECRET` | Same as backend JWT_SECRET |
-| `NEXTAUTH_URL` | `https://ecom-frontend.onrender.com` |
-| `NEXT_PUBLIC_RECAPTCHA_SITE_KEY` | Your reCAPTCHA site key |
-
-## Step 6: Verify Deployment
-
-1. Wait for both services to build and deploy
-2. Check backend health: `https://ecom-backend.onrender.com/api/health`
-3. Open frontend: `https://ecom-frontend.onrender.com`
+- **Uploaded images are ephemeral.** The API writes to `/app/uploads` inside the
+  container; without a mounted disk every redeploy erases them. To persist them,
+  add a Render Disk (paid plan) to the backend service with **mount path
+  `/app/uploads`**, or move uploads to S3/Cloudinary.
+- **Free plan spins down.** Free web services sleep after ~15 minutes idle; the
+  first request then takes ~30s and live Socket.IO connections drop. Use a paid
+  instance for real-time features in production.
+- **Pre-existing type errors.** `npm run type-check` in `server/` reports errors
+  in Elasticsearch/Mongoose generics. They do not block the build (the Dockerfile
+  only requires `dist/server.js` to be emitted) but should be cleaned up.
 
 ## Troubleshooting
 
-### Backend 404 on /api/categories
-- Ensure `NEXT_PUBLIC_API_URL` in frontend matches your backend URL
-- Check backend is running: `https://ecom-backend.onrender.com/api/health`
-- Verify CORS: `FRONTEND_URL` env var matches your frontend URL exactly
+| Symptom | Cause / fix |
+|---------|-------------|
+| Deploy fails: *no open ports detected* | A `PORT` env var is overriding Render's. Delete it. |
+| API 404s from the browser | `NEXT_PUBLIC_API_URL` wrong or not set at **build** time — redeploy the frontend after fixing it (**Clear build cache & deploy**). |
+| CORS error in the console | Backend `FRONTEND_URL` must exactly match the frontend origin (scheme + host, no trailing slash). |
+| Socket.IO `connect_error` | Token missing/expired (sockets require auth), or `FRONTEND_URL` does not match the browser origin. |
+| Mongo connection timeout | Atlas Network Access missing `0.0.0.0/0`, or the password is not URL-encoded. |
+| Images 404 after a redeploy | Ephemeral storage — see Known limitations. |
+| Health check failing on the backend | Confirm `GET /api/health` returns 200 locally and that `HTTPS_ENABLED` is `false`. |
 
-### Hydration Warning
-- The `suppressHydrationWarning` prop on `<html>` fixes browser extension conflicts
-- If you still see warnings, disable browser extensions and refresh
+## Local development
 
-### Socket.IO Real-time
-- Socket.IO is configured in `server/src/config/socket.ts`
-- For production with multiple backend instances, enable Redis adapter
-- Single Render instance works without Redis adapter
-
-## Manual Deploy (Alternative to render.yaml)
-
-### Backend
 ```bash
-# In Render Dashboard, create a Web Service
-# Runtime: Docker
-# Dockerfile: ./backend.Dockerfile
-# Health check: /api/health
+# Backend  -> http://localhost:5000
+cd server && npm run dev
+
+# Frontend -> http://localhost:3001
+cd app && npm run dev
 ```
 
-### Frontend
+Local `.env` files are **not** in Git — copy the examples:
+
 ```bash
-# In Render Dashboard, create a Web Service
-# Runtime: Docker
-# Dockerfile: ./frontend.Dockerfile
+cp app/.env.example app/.env.local
+cp server/.env.example server/.env
 ```
 
-## Local Development with Docker
+Or run everything in Docker (no Docker Desktop daemon = not available here):
 
 ```bash
-# Build both images
-docker build -f frontend.Dockerfile -t ecom-frontend .
-docker build -f backend.Dockerfile -t ecom-backend .
-
-# Run with docker-compose
 docker compose up -d
 ```

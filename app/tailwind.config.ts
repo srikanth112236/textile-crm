@@ -72,10 +72,22 @@ const config: Config = {
           from: { height: 'var(--radix-accordion-content-height)' },
           to: { height: '0' },
         },
+        // Slow push-in on the active hero photo (was only applied to slide 1).
+        'hero-kenburns': {
+          '0%': { transform: 'scale(1)' },
+          '100%': { transform: 'scale(1.08)' },
+        },
+        // Entrance for the hero copy each time a slide becomes active.
+        'hero-rise': {
+          '0%': { opacity: '0', transform: 'translateY(18px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
       },
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
+        'hero-kenburns': 'hero-kenburns 7s ease-out forwards',
+        'hero-rise': 'hero-rise 700ms cubic-bezier(0.22, 1, 0.36, 1) forwards',
       },
       fontSize: {
         base: ['1rem', { lineHeight: '1.2', letterSpacing: '-0.01em' }],

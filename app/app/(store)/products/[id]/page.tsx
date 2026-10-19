@@ -40,7 +40,7 @@ export async function generateMetadata({ params }: ProductDetailPageProps): Prom
     ? (typeof product.images[0] === 'string' ? product.images[0] : product.images[0].url)
     : '');
 
-  const imageUrl = ogImage.includes('/uploads/') ? `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}${ogImage}` : ogImage;
+  const imageUrl = ogImage.includes('/uploads/') ? `${process.env.NEXT_PUBLIC_API_URL || 'https://textile-crm-backend.onrender.com'}${ogImage}` : ogImage;
 
   return {
     title: metaTitle,

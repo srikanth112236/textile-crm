@@ -1,6 +1,6 @@
 /** @type {import('next-sitemap').IConfig} */
-const siteUrl = process.env.SITE_URL || 'https://yourdomain.com';
-const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+const siteUrl = process.env.SITE_URL || 'https://textile-crm-frontend.onrender.com';
+const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://textile-crm-backend.onrender.com';
 
 async function fetchJson(path) {
   try {

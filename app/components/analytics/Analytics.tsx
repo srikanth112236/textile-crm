@@ -21,7 +21,7 @@ export function Analytics() {
     }
     // Fire-and-forget beacon for server-side CWV log (4G performance budget)
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://textile-crm-backend.onrender.com';
       const payload = JSON.stringify({ name: metric.name, value: metric.value, rating: metric.rating, path: window.location.pathname });
       if (navigator.sendBeacon) {
         navigator.sendBeacon(`${apiUrl}/api/analytics/web-vitals`, new Blob([payload], { type: 'application/json' }));

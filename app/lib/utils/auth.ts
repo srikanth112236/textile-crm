@@ -74,7 +74,7 @@ export function refreshAccessToken(): Promise<string | null> {
   refreshPromise = (async (): Promise<string | null> => {
     try {
       const { default: axios } = await import('axios');
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://textile-crm-backend.onrender.com';
       const storedRefresh = localStorage.getItem(REFRESH_KEY);
       const response = await axios.post(
         `${API_URL}/api/auth/refresh`,

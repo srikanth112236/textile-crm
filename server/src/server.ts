@@ -56,7 +56,7 @@ app.get('/api/health', (_req, res) => {
 import path from 'path';
 app.use('/uploads', (req, res, next) => {
   // Set CORS headers for static files
-  res.header('Access-Control-Allow-Origin', process.env.FRONTEND_URL || 'http://localhost:3001');
+  res.header('Access-Control-Allow-Origin', process.env.FRONTEND_URL || 'https://textile-crm-frontend.onrender.com');
   res.header('Access-Control-Allow-Credentials', 'true');
   res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');

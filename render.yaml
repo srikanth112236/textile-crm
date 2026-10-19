@@ -1,69 +1,176 @@
+# Render Blueprint — Textile CRM / Mentoos storefront
+#
+# Services created from this file:
+#   textile-crm-backend   -> https://textile-crm-backend.onrender.com
+#   textile-crm-frontend  -> https://textile-crm-frontend.onrender.com
+#
+# Deploy: Render Dashboard -> New + -> Blueprint -> select this repo.
+# Variables marked `sync: false` are secrets: Render prompts for them during the
+# first sync instead of storing them in Git.
+#
+# NOTE: do NOT set PORT. Render injects it and both apps already read
+# process.env.PORT (Next.js picks it up automatically; the API falls back to
+# 5000 only when the variable is absent).
+
 services:
-  - name: ecom-backend
-    type: web
-    env: docker
-    region: oregon
-    plan: standard
+  # ---------------------------------------------------------------------------
+  # API — Express + Socket.IO (built from ./backend.Dockerfile)
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: textile-crm-backend
     runtime: docker
     dockerfilePath: ./backend.Dockerfile
     dockerContext: .
+    region: oregon
+    plan: free
     healthCheckPath: /api/health
     autoDeploy: true
     envVars:
       - key: NODE_ENV
         value: production
-      - key: PORT
-        value: 5000
+
+      # Database (MongoDB Atlas connection string)
       - key: MONGODB_URI
         sync: false
+
+      # --- URLs / CORS -------------------------------------------------------
+      # Must match the frontend exactly, otherwise the browser blocks the API.
+      - key: FRONTEND_URL
+        value: https://textile-crm-frontend.onrender.com
+      # Public base URL used to build links to uploaded files.
+      - key: API_BASE_URL
+        value: https://textile-crm-backend.onrender.com
+      # Render terminates TLS and forces HTTPS at the edge, so the app-level
+      # redirect is unnecessary (and would break internal health checks).
+      - key: HTTPS_ENABLED
+        value: "false"
+
+      # --- Auth --------------------------------------------------------------
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_ACCESS_EXPIRY
+        value: 15m
+      - key: JWT_REFRESH_EXPIRY
+        value: 7d
+      - key: MFA_ISSUER
+        value: E-Commerce Platform
+      - key: ADMIN_REGISTRATION_SECRET
+        sync: false
+      - key: SUPERADMIN_EMAIL
+        sync: false
+      - key: SUPERADMIN_PASSWORD
+        sync: false
+
+      # --- Redis (optional) --------------------------------------------------
+      # Leave blank to run without a cache / Socket.IO Redis adapter. The app
+      # logs a warning and degrades gracefully.
       - key: REDIS_HOST
         sync: false
       - key: REDIS_PORT
         value: "6379"
       - key: REDIS_PASSWORD
         sync: false
-      - key: JWT_SECRET
-        sync: false
-      - key: JWT_ACCESS_EXPIRY
-        value: 15m
-      - key: JWT_REFRESH_EXPIRY
-        value: 7d
-      - key: FRONTEND_URL
-        sync: false
+
+      # --- reCAPTCHA ---------------------------------------------------------
       - key: RECAPTCHA_SECRET_KEY
         sync: false
-      - key: MFA_ISSUER
-        value: E-Commerce Platform
-      - key: HTTPS_ENABLED
-        value: "true"
+
+      # --- Razorpay ----------------------------------------------------------
       - key: RAZORPAY_KEY_ID
         sync: false
       - key: RAZORPAY_KEY_SECRET
         sync: false
-      - key: RAZORPAY_MERCHANT_ID
-        sync: false
       - key: RAZORPAY_WEBHOOK_SECRET
         sync: false
 
-  - name: ecom-frontend
-    type: web
-    env: docker
-    region: oregon
-    plan: standard
+      # --- Shiprocket --------------------------------------------------------
+      - key: SHIPROCKET_EMAIL
+        sync: false
+      - key: SHIPROCKET_PASSWORD
+        sync: false
+      - key: SHIPROCKET_PICKUP_LOCATION
+        sync: false
+
+      # --- Optional integrations (safe to leave blank) -----------------------
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+      - key: MSG91_API_KEY
+        sync: false
+      - key: INSTAGRAM_ACCESS_TOKEN
+        sync: false
+      - key: INSTAGRAM_USER_ID
+        sync: false
+
+      # --- Background jobs (defaults are fine) -------------------------------
+      - key: PAYMENT_SWEEP_ENABLED
+        value: "true"
+      - key: SHIPROCKET_SYNC_ENABLED
+        value: "true"
+
+  # ---------------------------------------------------------------------------
+  # Frontend — Next.js (built from ./frontend.Dockerfile)
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: textile-crm-frontend
     runtime: docker
     dockerfilePath: ./frontend.Dockerfile
     dockerContext: .
+    region: oregon
+    plan: free
     autoDeploy: true
     envVars:
       - key: NODE_ENV
         value: production
+
+      # Inlined into the browser bundle at BUILD time (declared as ARG in
+      # frontend.Dockerfile), so this must be set before the first build.
       - key: NEXT_PUBLIC_API_URL
-        sync: false
-      - key: NEXTAUTH_SECRET
-        sync: false
+        value: https://textile-crm-backend.onrender.com
+
+      # --- NextAuth ----------------------------------------------------------
       - key: NEXTAUTH_URL
+        value: https://textile-crm-frontend.onrender.com
+      - key: NEXTAUTH_SECRET
+        generateValue: true
+
+      # --- reCAPTCHA ---------------------------------------------------------
+      - key: NEXT_PUBLIC_RECAPTCHA_SITE_KEY
         sync: false
-      - key: RECAPTCHA_SITE_KEY
+
+      # --- SEO / analytics ---------------------------------------------------
+      - key: SITE_URL
+        value: https://textile-crm-frontend.onrender.com
+      - key: NEXT_PUBLIC_GSC_VERIFICATION
         sync: false
-      - key: RAZORPAY_KEY_ID
+      - key: NEXT_PUBLIC_GA_ID
         sync: false
+      - key: NEXT_PUBLIC_META_PIXEL_ID
+        sync: false
+
+# -----------------------------------------------------------------------------
+# Optional add-ons (require a paid plan — enable if you need them).
+#
+# Persistent storage for product images uploaded through the admin panel.
+# Without it, uploads live on the container filesystem and are lost on every
+# deploy. Mount path must be /app/uploads (where the API serves them from).
+# Add this under the backend service, uncommented:
+#
+#     disk:
+#       name: uploads
+#       mountPath: /app/uploads
+#       sizeGB: 1
+#
+# Redis / Key Value instance for caching + multi-instance Socket.IO:
+#
+#   - type: redis
+#     name: textile-crm-redis
+#     plan: free
+#     ipAllowList: []

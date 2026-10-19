@@ -25,7 +25,7 @@ export async function notifyRestock(productId: string): Promise<number> {
         });
         if (match && (match.stock || 0) <= 0) continue;
       }
-      const link = `${process.env.FRONTEND_URL || 'http://localhost:3001'}/products/${product._id}`;
+      const link = `${process.env.FRONTEND_URL || 'https://textile-crm-frontend.onrender.com'}/products/${product._id}`;
       if (sub.contactType === 'email' || contactIsEmail(sub.contact)) {
         await sendEmail({
           to: sub.contact,
@@ -63,7 +63,7 @@ export async function notifyPriceDrop(productId: string, oldPrice: number, newPr
     let sent = 0;
     for (const alert of alerts) {
       if (alert.lastNotifiedPrice !== undefined && newPrice >= alert.lastNotifiedPrice) continue;
-      const link = `${process.env.FRONTEND_URL || 'http://localhost:3001'}/products/${product._id}`;
+      const link = `${process.env.FRONTEND_URL || 'https://textile-crm-frontend.onrender.com'}/products/${product._id}`;
       const contact = alert.contact;
       if (contact && (alert.contactType === 'email' || contactIsEmail(contact))) {
         await sendEmail({
