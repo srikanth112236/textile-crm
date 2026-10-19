@@ -30,10 +30,23 @@ export const metadata: Metadata = {
   },
 };
 
+// The homepage is rendered per request: the backend may be waking up from a
+// cold spin (Render free tier holds requests ~50s) or offline when this app
+// deploys, and static prerender aborts the whole build. Streaming + a short
+// per-call deadline keeps TTFB sane and the page resilient.
+export const dynamic = 'force-dynamic';
+
 async function getHomeData() {
   // Each fetch fails independently to [] so one slow/broken endpoint never
   // blanks the whole homepage. Single parallel batch keeps TTFB to one hop.
-  const safe = <T,>(p: Promise<T>, fallback: T): Promise<T> => p.catch(() => fallback);
+  // The race guarantees the batch resolves within TIMEOUT_MS even if the
+  // backend never answers (axios has a 30s cap; hotels/we wake services need less).
+  const TIMEOUT_MS = 12000;
+  const safe = <T,>(p: Promise<T>, fallback: T): Promise<T> =>
+    Promise.race([
+      p.catch(() => fallback),
+      new Promise<T>((resolve) => setTimeout(() => resolve(fallback), TIMEOUT_MS)),
+    ]);
   try {
     const [newArrivalsRes, trendingRes, bestSellersRes, topRatedRes, categoriesResponse] = await Promise.all([
       safe(productsApi.getProducts({ status: 'active', limit: 10, sort: 'createdAt', order: 'desc' }), null),
