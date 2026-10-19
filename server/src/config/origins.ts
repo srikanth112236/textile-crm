@@ -6,6 +6,11 @@
 // production so `npm run dev` keeps working without any env changes.
 const PRODUCTION_FRONTEND = 'https://textile-crm-frontend.onrender.com';
 
+// The deployed storefront is always allowed, even if FRONTEND_URL is
+// misconfigured (e.g. pointing at localhost on a production service, which
+// silently produced "No Access-Control-Allow-Origin header" for every call).
+const ALWAYS_ALLOWED = [PRODUCTION_FRONTEND];
+
 const envOrigins = (process.env.FRONTEND_URL || '')
   .split(',')
   .map((origin) => origin.trim())
@@ -17,7 +22,7 @@ const devOrigins =
     : ['http://localhost:3001', 'http://127.0.0.1:3001'];
 
 export const allowedOrigins: string[] = Array.from(
-  new Set([...(envOrigins.length > 0 ? envOrigins : [PRODUCTION_FRONTEND]), ...devOrigins])
+  new Set([...ALWAYS_ALLOWED, ...envOrigins, ...devOrigins])
 );
 
 // Express `cors` callback: echo the origin when allowed, otherwise omit the

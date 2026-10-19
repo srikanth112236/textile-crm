@@ -5,6 +5,16 @@ import { CustomError } from './errorHandler';
 const RECAPTCHA_SECRET_KEY = process.env.RECAPTCHA_SECRET_KEY;
 
 /**
+ * Captcha can be switched off explicitly for environments where the widget
+ * isn't wired up yet (e.g. a new production domain). Set either:
+ *   DISABLE_RECAPTCHA=true
+ *   RECAPTCHA_ENABLED=false
+ * Re-enable by removing the flag once the site/secret keys are configured.
+ */
+const RECAPTCHA_DISABLED =
+  process.env.DISABLE_RECAPTCHA === 'true' || process.env.RECAPTCHA_ENABLED === 'false';
+
+/**
  * Verify Google reCAPTCHA v3 token
  */
 export const verifyRecaptcha = async (
@@ -12,8 +22,8 @@ export const verifyRecaptcha = async (
   _res: Response,
   next: NextFunction
 ): Promise<void> => {
-  // Skip in development if RECAPTCHA_SECRET_KEY is not set
-  if (!RECAPTCHA_SECRET_KEY || process.env.NODE_ENV === 'development') {
+  // Skip when disabled via env, in development, or when no secret is set.
+  if (RECAPTCHA_DISABLED || !RECAPTCHA_SECRET_KEY || process.env.NODE_ENV === 'development') {
     return next();
   }
 
