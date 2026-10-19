@@ -1,0 +1,5 @@
+{
+  "ignoreTestFiles": "*.ts",
+  "testFiles": "**/*.cy.{js,jsx,ts,tsx}"
+}
+

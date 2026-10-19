@@ -1,0 +1,16 @@
+# *
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /api/
+Disallow: /user/
+Disallow: /orders/
+Disallow: /checkout
+Disallow: /cart
+Disallow: /wishlist
+
+# Host
+Host: https://yourdomain.com
+
+# Sitemaps
+Sitemap: https://yourdomain.com/sitemap.xml
