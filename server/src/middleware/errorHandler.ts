@@ -23,7 +23,17 @@ export const errorHandler = (
   res: Response,
   _next: NextFunction
 ): void => {
-  const statusCode = err.statusCode || 500;
+  // Surface client mistakes as 4xx instead of a blanket 500: Mongoose
+  // validation/cast failures are bad input, duplicate keys are conflicts.
+  const name = (err as any).name;
+  const derivedStatus =
+    name === 'ValidationError' || name === 'CastError'
+      ? 400
+      : (err as any).code === 11000
+        ? 409
+        : undefined;
+
+  const statusCode = err.statusCode || derivedStatus || 500;
   const message = err.message || 'Internal Server Error';
 
   // Log 500+ server errors in development
