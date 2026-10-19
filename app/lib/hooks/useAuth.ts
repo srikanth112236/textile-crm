@@ -82,9 +82,12 @@ export const useAuth = () => {
     }
     const back = opts?.redirectTo
       ?? (typeof window !== 'undefined' ? `${window.location.pathname}${window.location.search}` : '/');
+    // Product rule: logout lands on the storefront with a gentle login
+    // prompt (never a hard /login bounce). callbackUrl preserves where
+    // the user was so the modal's Login button can return them.
     const dest = back.startsWith('/login') || back.startsWith('/register')
-      ? '/login'
-      : `/login?callbackUrl=${encodeURIComponent(back)}`;
+      ? '/'
+      : `/?authRequired=1&callbackUrl=${encodeURIComponent(back)}`;
     router.push(dest);
   }, [router, toast]);
 

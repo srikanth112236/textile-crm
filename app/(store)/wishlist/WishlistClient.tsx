@@ -24,7 +24,7 @@ export const WishlistClient: React.FC = () => {
 
   useEffect(() => {
     if (!isAuthenticated) {
-      router.push('/login');
+      router.push('/?authRequired=1');
       return;
     }
     fetchWishlist();

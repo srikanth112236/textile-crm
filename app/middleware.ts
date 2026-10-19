@@ -45,10 +45,12 @@ export default withAuth(
 
     // For protected routes, require authentication
     if (!token) {
-      // Redirect to login, but preserve the original URL as callback
-      const loginUrl = new URL('/login', req.url);
-      loginUrl.searchParams.set('callbackUrl', path);
-      return NextResponse.redirect(loginUrl);
+      // Product rule: never force /login. Land on the storefront with a
+      // gentle login prompt (AuthPromptListener opens the modal on `/`).
+      const homeUrl = new URL('/', req.url);
+      homeUrl.searchParams.set('authRequired', '1');
+      homeUrl.searchParams.set('callbackUrl', path);
+      return NextResponse.redirect(homeUrl);
     }
 
     const userRole = (token as any)?.role;
@@ -92,8 +94,11 @@ export default withAuth(
           return true; // Allow access
         }
         
-        // Require token for all other routes (protected routes)
-        return !!token;
+        // The middleware body above already decides access (and redirects
+        // protected pages to `/?authRequired=1`). Returning true here avoids
+        // next-auth's default behavior of bouncing unauthorized requests to
+        // pages.signIn — https://next-auth.js.org/tutorials/securing-pages-and-api-routes
+        return true;
       },
     },
   }

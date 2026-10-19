@@ -11,6 +11,8 @@ interface LoginModalProps {
   onOpenChange: (open: boolean) => void;
   title?: string;
   description?: string;
+  /** Where the modal's Login button navigates (e.g. allows passing callbackUrl). */
+  loginHref?: string;
 }
 
 export const LoginModal: React.FC<LoginModalProps> = ({
@@ -18,6 +20,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   onOpenChange,
   title = 'Login Required',
   description = 'Login or register to add to cart, wishlist, checkout or place orders. Browsing and pincode check work without login.',
+  loginHref = '/login',
 }) => {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -57,7 +60,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             Cancel
           </Button>
           <Button asChild className="w-full sm:w-auto">
-            <Link href="/login" onClick={() => onOpenChange(false)}>
+            <Link href={loginHref} onClick={() => onOpenChange(false)}>
               <LogIn className="mr-2 h-4 w-4" />
               Login
             </Link>

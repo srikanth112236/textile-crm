@@ -2,6 +2,8 @@ import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 import { Providers } from '@/components/providers/Providers';
+import { AuthPromptListener } from '@/components/auth/AuthPromptListener';
+import { Suspense } from 'react';
 import { Toaster } from '@/components/ui/toaster';
 import { Analytics } from '@/components/analytics/Analytics';
 
@@ -34,6 +36,9 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning className={`${geistSans.variable} ${geistMono.variable}`}>
       <body className={`${geistSans.className} bg-slate-50 text-slate-900 antialiased selection:bg-amber-500 selection:text-white`}>
         <Providers>{children}</Providers>
+        <Suspense fallback={null}>
+          <AuthPromptListener />
+        </Suspense>
         <Toaster />
         <Analytics />
       </body>

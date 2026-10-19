@@ -56,9 +56,10 @@ export function AuthSessionManager() {
       try {
         await signOut({ redirect: false });
       } catch { /* already out */ }
-      // Login page shows a "session expired" notice when ?expired=1 is present.
+      // Storefront + login prompt: AuthPromptListener on `/` shows a
+      // "Session Expired" modal (never a hard /login bounce).
       const back = `${window.location.pathname}${window.location.search}`;
-      window.location.href = `/login?callbackUrl=${encodeURIComponent(back)}&expired=1`;
+      window.location.href = `/?expired=1&authRequired=1&callbackUrl=${encodeURIComponent(back)}`;
     };
 
     const onFocus = async () => {

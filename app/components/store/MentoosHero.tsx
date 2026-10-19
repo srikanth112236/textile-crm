@@ -116,8 +116,8 @@ export function MentoosHero() {
                   active ? 'animate-hero-kenburns' : ''
                 } ${isLoaded ? 'opacity-100' : 'opacity-0'}`}
                 style={{ transformOrigin: 'center' }}
-                loading={i === 0 ? 'eager' : 'lazy'}
-                fetchPriority={i === 0 ? 'high' : 'low'}
+                loading="eager"
+                fetchPriority={i === 0 ? 'high' : 'auto'}
                 decoding="async"
                 draggable={false}
                 onLoad={() => setLoaded((prev) => (prev.includes(i) ? prev : [...prev, i]))}
@@ -164,7 +164,7 @@ export function MentoosHero() {
                 </Button>
               </Link>
               <Link href="/products">
-                <Button size="lg" variant="outline" className="border-white/40 text-white hover:bg-white/15 hover:text-white font-semibold px-6 py-6 rounded-2xl text-sm sm:text-base backdrop-blur-sm shadow-lg shadow-black/10 transition-all hover:scale-[1.02]">
+                <Button size="lg" variant="outline" className="bg-white/10 border-white/40 text-white hover:bg-white/20 hover:text-white font-semibold px-6 py-6 rounded-2xl text-sm sm:text-base backdrop-blur-sm shadow-lg shadow-black/10 transition-all hover:scale-[1.02]">
                   VIEW ALL COLLECTIONS
                 </Button>
               </Link>

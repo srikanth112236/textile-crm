@@ -14,7 +14,7 @@ interface AuthWrapperProps {
 export function AuthWrapper({
   children,
   requiredRole,
-  redirectTo = '/login',
+  redirectTo = '/?authRequired=1',
 }: AuthWrapperProps) {
   const { data: session, status } = useSession();
   const router = useRouter();

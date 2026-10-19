@@ -22,7 +22,7 @@ export const CartClient: React.FC = () => {
 
   React.useEffect(() => {
     if (!isAuthenticated) {
-      router.push('/login');
+      router.push('/?authRequired=1&callbackUrl=/cart');
     }
   }, [isAuthenticated, router]);
 

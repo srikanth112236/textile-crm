@@ -325,7 +325,7 @@ export default function CheckoutClient() {
           title: 'Session expired during payment',
           description: 'Your order was created. Please log in again — you will land on it to complete payment.',
         });
-        router.push(`/login?callbackUrl=${encodeURIComponent(`/user/orders/${placedId}`)}&expired=1`);
+        router.push(`/?expired=1&authRequired=1&callbackUrl=${encodeURIComponent(`/user/orders/${placedId}`)}`);
       } else {
         const errorMsg = getErrorMessage(error) || 'Failed to place order.';
         toast({ title: 'Order Error', description: errorMsg, variant: 'destructive' });

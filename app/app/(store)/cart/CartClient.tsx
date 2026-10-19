@@ -91,7 +91,7 @@ export const CartClient: React.FC = () => {
 
   React.useEffect(() => {
     if (!isAuthenticated && !guestLoading && guestItems.length === 0 && !loading) {
-      router.push('/login');
+      router.push('/?authRequired=1&callbackUrl=/cart');
     }
   }, [isAuthenticated, guestLoading, guestItems.length, loading, router]);
 

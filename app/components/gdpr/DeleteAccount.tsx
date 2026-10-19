@@ -43,8 +43,8 @@ export default function DeleteAccount() {
         localStorage.clear();
       }
 
-      // Redirect to home/login
-      router.push('/login');
+      // Redirect to home with a login prompt
+      router.push('/?authRequired=1&callbackUrl=/user/settings');
     } catch (err: any) {
       const errorMessage = err.response?.data?.error || err.message || 'Failed to delete account';
       setError(errorMessage);
