@@ -1,5 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Build validations run with NEXT_DIST_DIR set (see app/scripts/verifyBuild.js)
+  // so they write to a throwaway directory instead of clobbering the `.next`
+  // that a running `next dev` server is reading from.
+  distDir: process.env.NEXT_DIST_DIR || '.next',
   // Smaller payloads on average Indian mobile connections (doc §32)
   compress: true,
   poweredByHeader: false,

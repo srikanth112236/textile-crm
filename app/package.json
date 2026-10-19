@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev -p 3001",
     "build": "next build",
+    "build:verify": "node scripts/verifyBuild.js",
     "start": "next start",
     "lint": "next lint",
     "postbuild": "next-sitemap",

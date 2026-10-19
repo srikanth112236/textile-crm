@@ -11,10 +11,18 @@ const config: Config = {
   ],
   prefix: '',
   theme: {
+    // NOTE: listing `screens` here REPLACES Tailwind's defaults, so every
+    // breakpoint must be repeated. Declaring only 2xl produced a `.container`
+    // with `max-width: none` below 1400px — the storefront then stretched
+    // edge-to-edge and the rounded hero card lost its frame.
     container: {
       center: true,
       padding: '2rem',
       screens: {
+        sm: '640px',
+        md: '768px',
+        lg: '1024px',
+        xl: '1280px',
         '2xl': '1400px',
       },
     },

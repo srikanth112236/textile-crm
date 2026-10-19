@@ -96,7 +96,7 @@ export function MentoosHero() {
 
   return (
     <section
-      className="relative h-[480px] sm:h-[560px] lg:h-[620px] w-full overflow-hidden rounded-3xl bg-slate-950 border border-slate-800 shadow-2xl"
+      className="relative mx-auto h-[480px] w-full max-w-[1280px] overflow-hidden rounded-3xl border border-slate-800 bg-slate-950 shadow-2xl sm:h-[560px] lg:h-[620px]"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
       onFocusCapture={() => setPaused(true)}
@@ -113,7 +113,7 @@ export function MentoosHero() {
         <div
           key={s.id}
           aria-hidden={i !== current}
-          className={`absolute inset-0 transition-opacity duration-[1200ms] ease-out ${
+          className={`absolute inset-0 transition-opacity duration-1000 ease-out ${
             i === current ? 'opacity-100' : 'opacity-0'
           }`}
         >
@@ -123,6 +123,7 @@ export function MentoosHero() {
             draggable={false}
             loading="eager"
             decoding="async"
+            fetchPriority={i === 0 ? 'high' : 'auto'}
             // Fixed object position: face/subject stays framed, never drifts.
             className="absolute inset-0 h-full w-full object-cover object-[50%_35%]"
           />

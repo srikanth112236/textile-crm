@@ -20,7 +20,7 @@ const API_BASE =
 export interface Paged<T> {
   success?: boolean;
   data?: T[];
-  pagination?: { page?: number; total?: number; pages?: number };
+  pagination?: { page?: number; limit?: number; total?: number; pages?: number };
 }
 
 export async function serverGetJSON<T extends Paged<unknown>>(

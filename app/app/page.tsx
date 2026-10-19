@@ -91,11 +91,11 @@ export default async function HomePage() {
 
       {/* Main Storefront Content — spec §4 order, one section each */}
       <main className="flex-1 w-full">
-        <div className="container mx-auto px-4 py-6 space-y-10 sm:space-y-14">
+        <div className="container mx-auto px-4 py-6 space-y-10 sm:px-6 sm:space-y-14 lg:px-10">
           <Suspense fallback={<HomeLoadingSkeleton />}>
-            {/* 1. Main Hero Banner */}
-            <MentoosHero />
+            {/* 1. Main Hero Banner — contained rounded card, never full-bleed */}
 
+            <MentoosHero />
             {/* 2. Shop by Category */}
             <CategoryGrid categories={categories} />
 
@@ -138,28 +138,7 @@ export default async function HomePage() {
             {/* 28. Smart Cart Recommendations (already in CartContext) */}
 
             {/* 33. Personalized Recommendations */}
-            <section className="py-6">
-              <h2 className="text-xl font-extrabold tracking-tight mb-4">Recommended For You</h2>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {bestSellers.slice(0, 4).map((p) => (
-                  <Link key={p._id} href={`/products/${p._id}`} className="group block rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm hover:shadow-xl transition-all">
-                    <div className="aspect-square overflow-hidden bg-slate-100 dark:bg-slate-950">
-                      <Image
-                        src={typeof p.images?.[0] === 'string' ? p.images[0] : (p.images?.[0]?.url || '/placeholder-product.jpg')}
-                        alt={p.name}
-                        fill
-                        loading="lazy"
-                        className="object-cover group-hover:scale-105 transition-transform duration-500"
-                      />
-                    </div>
-                    <div className="p-3">
-                      <h4 className="text-xs font-bold truncate">{p.name}</h4>
-                      <p className="text-xs font-semibold text-amber-600">{formatPrice(p.price)}</p>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            </section>
+         
 
             {/* 11. Instagram / Social Content */}
             <InstagramFeed />

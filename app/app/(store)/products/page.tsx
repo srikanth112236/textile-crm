@@ -1,7 +1,8 @@
 import { Metadata } from 'next';
 import { Suspense } from 'react';
 import { ProductsListingClient } from '@/components/products/ProductsListingClient';
-import { productsApi } from '@/lib/api/products';
+import { serverGetJSON, type Paged } from '@/lib/api/serverFetch';
+import type { IProduct } from '@/lib/api/types';
 
 export const metadata: Metadata = {
   title: 'Products | E-Commerce Platform',
@@ -60,13 +61,45 @@ async function getProducts(searchParams: Awaited<ProductsPageProps['searchParams
       order: searchParams.order || 'desc',
     };
 
-    const response = await productsApi.getProducts(filters);
-    return response;
+    // Ride on native fetch instead of axios: axios resolves redirects through
+    // follow-redirects, which calls the legacy url.parse() and emits a DEP0169
+    // warning on every server render of this route.
+    const qs = new URLSearchParams();
+    qs.set('page', String(filters.page));
+    qs.set('limit', String(filters.limit));
+    qs.set('status', filters.status);
+    qs.set('sort', filters.sort);
+    qs.set('order', filters.order);
+    for (const [key, value] of Object.entries(filters)) {
+      if (value === undefined || value === null || value === '') continue;
+      if (['page', 'limit', 'status', 'sort', 'order', 'inStock'].includes(key)) continue;
+      qs.set(key, String(value));
+    }
+    if (filters.inStock === true) qs.set('inStock', 'true');
+
+    const response = await serverGetJSON<Paged<IProduct>>(`/products?${qs.toString()}`);
+    if (!response) {
+      return {
+        success: true,
+        data: [] as IProduct[],
+        pagination: { page: 1, limit: 20, total: 0, pages: 0 },
+      };
+    }
+    return {
+      success: response.success ?? true,
+      data: response.data ?? [],
+      pagination: {
+        page: response.pagination?.page ?? 1,
+        limit: response.pagination?.limit ?? 20,
+        total: response.pagination?.total ?? 0,
+        pages: response.pagination?.pages ?? 0,
+      },
+    };
   } catch (error) {
     console.error('Failed to fetch products:', error);
     return {
       success: true,
-      data: [],
+      data: [] as IProduct[],
       pagination: {
         page: 1,
         limit: 20,
