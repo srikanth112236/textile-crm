@@ -86,8 +86,7 @@ const config: Config = {
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
-        'hero-kenburns': 'hero-kenburns 7s ease-out forwards',
-        'hero-rise': 'hero-rise 700ms cubic-bezier(0.22, 1, 0.36, 1) forwards',
+        'hero-rise': 'hero-rise 600ms cubic-bezier(0.22, 1, 0.36, 1) forwards',
       },
       fontSize: {
         base: ['1rem', { lineHeight: '1.2', letterSpacing: '-0.01em' }],
