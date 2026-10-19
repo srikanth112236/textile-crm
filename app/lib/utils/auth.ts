@@ -56,9 +56,16 @@ export function broadcastTokenRefreshed(accessToken: string): void {
 
 export function broadcastSessionExpired(): void {
   if (typeof window !== 'undefined') {
+    // Once a session is known dead, never re-seed its stale snapshot token.
+    // Without this, syncTokenFromSession() kept restoring the expired token
+    // from the NextAuth session, producing a 401 -> refresh -> broadcast loop.
+    sessionInvalidated = true;
     window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT));
   }
 }
+
+/** True after an expiry was broadcast, until a fresh token is stored. */
+let sessionInvalidated = false;
 
 /**
  * Shared, single-flight access-token refresh. Concurrent callers share one
@@ -88,6 +95,7 @@ export function refreshAccessToken(): Promise<string | null> {
       if (!accessToken) return null;
       localStorage.setItem(ACCESS_KEY, accessToken);
       if (rotatedRefresh) localStorage.setItem(REFRESH_KEY, rotatedRefresh);
+      sessionInvalidated = false;
       broadcastTokenRefreshed(accessToken);
       return accessToken;
     } catch {
@@ -117,15 +125,23 @@ export const syncTokenFromSession = async (opts?: { onlyIfNewer?: boolean }): Pr
     const sessionToken = (session as any)?.accessToken as string | undefined;
     const sessionRefresh = (session as any)?.refreshToken as string | undefined;
 
+    const stored = localStorage.getItem(ACCESS_KEY);
+    const sessionExp = getAccessTokenExpiry(sessionToken) ?? 0;
+    const sessionUsable = !!sessionToken && sessionExp > Date.now() + 30_000;
+
+    // After an expiry broadcast the NextAuth snapshot is known-stale. Do not
+    // resurrect it (that caused a repeated 401 -> prompt loop). A genuinely
+    // fresh token means the user just logged in again, so accept it.
+    if (sessionInvalidated && !sessionUsable) return stored;
+    if (sessionUsable) sessionInvalidated = false;
+
     if (sessionRefresh) {
       localStorage.setItem(REFRESH_KEY, sessionRefresh);
     }
 
-    const stored = localStorage.getItem(ACCESS_KEY);
     if (!sessionToken) return stored;
 
     if (opts?.onlyIfNewer !== false) {
-      const sessionExp = getAccessTokenExpiry(sessionToken) ?? 0;
       const storedExp = stored ? getAccessTokenExpiry(stored) ?? 0 : 0;
       // Stored token is same-or-newer: keep it, return it.
       if (stored && storedExp >= sessionExp) return stored;

@@ -7,6 +7,7 @@ import {
   msUntilExpiry,
   isTokenExpired,
   refreshAccessToken,
+  clearAuthTokens,
 } from '@/lib/utils/auth';
 import { signOut, getSession } from 'next-auth/react';
 import { showExpiredPromptInPlace } from '@/lib/authPrompt';
@@ -31,6 +32,8 @@ export function AuthSessionManager() {
    * /?expired=1&authRequired=1&callbackUrl=… and pollutes the URL.
    */
   const wasAuthed = useRef(false);
+  /** Show the expired prompt at most once until the visitor signs in again. */
+  const expiredHandled = useRef(false);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -72,12 +75,19 @@ export function AuthSessionManager() {
       }, delay);
     };
 
-    const onRefreshed = () => schedule();
+    const onRefreshed = () => {
+      expiredHandled.current = false;
+      schedule();
+    };
     const onExpired = async () => {
       // A guest was never signed in — nothing expired.
       if (!wasAuthed.current) return;
+      // Multiple 401s can land together (parallel requests); prompt once.
+      if (expiredHandled.current) return;
+      expiredHandled.current = true;
       wasAuthed.current = false;
       clear();
+      clearAuthTokens();
       try {
         await signOut({ redirect: false });
       } catch { /* already out */ }
@@ -97,6 +107,7 @@ export function AuthSessionManager() {
         const stored = localStorage.getItem('accessToken');
         if (stored) {
           wasAuthed.current = true;
+          expiredHandled.current = false;
           if (isTokenExpired(stored)) {
             await refreshAccessToken();
             schedule();

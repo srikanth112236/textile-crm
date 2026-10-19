@@ -19,11 +19,14 @@ export function AuthPromptListener() {
   const [open, setOpen] = useState(false);
   const [wasExpired, setWasExpired] = useState(false);
   const handledRef = useRef(false);
+  /** Once dismissed, stay dismissed for this page session — never re-pop. */
+  const dismissedRef = useRef(false);
 
   // The visitor was already on `/` when a real session expired: open the
   // modal in place instead of rewriting the URL with prompt params.
   useEffect(() => {
     const onExpired = () => {
+      if (dismissedRef.current) return;
       setWasExpired(true);
       setOpen(true);
     };
@@ -61,7 +64,7 @@ export function AuthPromptListener() {
 
   if (!open) return null;
 
-  return <AuthPromptModal expired={wasExpired} onClose={() => setOpen(false)} />;
+  return <AuthPromptModal expired={wasExpired} onClose={() => { dismissedRef.current = true; setOpen(false); }} />;
 }
 
 function AuthPromptModal({ expired, onClose }: { expired: boolean; onClose: () => void }) {

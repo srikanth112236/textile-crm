@@ -23,6 +23,11 @@ const apiClient: AxiosInstance = axios.create({
 // 401 path know which token just failed (never retry with the same one).
 let cachedToken: string | null | undefined;
 
+// "Session expired" is a once-per-page-life notification. Before this latch,
+// every 401 (e.g. a guest wishlist fetch) re-broadcast it, so the homepage
+// modal reopened every few seconds. Reset when a token is present again.
+let expiredBroadcasted = false;
+
 // Request interceptor to add auth token (fast path: no network call)
 apiClient.interceptors.request.use(
   (config) => {
@@ -33,6 +38,7 @@ apiClient.interceptors.request.use(
       } catch { /* ignore */ }
       if (token) {
         cachedToken = token;
+        expiredBroadcasted = false;
         config.headers.Authorization = `Bearer ${token}`;
         return config;
       }
@@ -99,6 +105,14 @@ apiClient.interceptors.response.use(
           ? String(originalRequest.headers?.Authorization || '').replace(/^Bearer\s+/i, '') || null
           : null;
 
+      // A request sent WITHOUT a token is a normal "login required" 401
+      // (guests browsing public pages, cart/wishlist hooks). It is NOT an
+      // expired session — refreshing and broadcasting here made the
+      // "Session Expired" modal pop up repeatedly for logged-out visitors.
+      if (!failedToken) {
+        return Promise.reject(error);
+      }
+
       // 1) Refresh (cookie primary, stored copy fallback) — shared single-flight.
       try {
         const { refreshAccessToken } = await import('../utils/auth');
@@ -129,7 +143,8 @@ apiClient.interceptors.response.use(
       // 3) Truly logged out: clear local tokens, tell the app once, and reject
       // with the ORIGINAL 401 (not the refresh error) so callers show the
       // right message and the resume-after-login flow can trigger.
-      if (typeof window !== 'undefined') {
+      if (typeof window !== 'undefined' && !expiredBroadcasted) {
+        expiredBroadcasted = true;
         try {
           const { clearAuthTokens, broadcastSessionExpired } = await import('../utils/auth');
           clearAuthTokens();
