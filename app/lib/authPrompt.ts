@@ -10,6 +10,20 @@
  */
 export const AUTH_REQUIRED_PARAM = 'authRequired';
 
+/** Broadcast that a real session ended while the visitor is on the homepage. */
+export const AUTH_EXPIRED_EVENT = 'auth:expired';
+
+/**
+ * Open the "Session Expired" prompt without touching the URL.
+ * Used when the visitor is already on `/` — navigating to
+ * `/?expired=1&authRequired=1` would only pollute the address bar.
+ */
+export function showExpiredPromptInPlace() {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
+  }
+}
+
 export function authPromptUrl(callbackUrl?: string | null, opts?: { expired?: boolean }) {
   const params = new URLSearchParams({ authRequired: '1' });
   if (callbackUrl) params.set('callbackUrl', callbackUrl);

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { LoginModal } from '@/components/auth/LoginModal';
+import { AUTH_EXPIRED_EVENT } from '@/lib/authPrompt';
 
 /**
  * Homepage-based auth prompt.
@@ -18,6 +19,17 @@ export function AuthPromptListener() {
   const [open, setOpen] = useState(false);
   const [wasExpired, setWasExpired] = useState(false);
   const handledRef = useRef(false);
+
+  // The visitor was already on `/` when a real session expired: open the
+  // modal in place instead of rewriting the URL with prompt params.
+  useEffect(() => {
+    const onExpired = () => {
+      setWasExpired(true);
+      setOpen(true);
+    };
+    window.addEventListener(AUTH_EXPIRED_EVENT, onExpired);
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, onExpired);
+  }, []);
 
   useEffect(() => {
     const authRequired = searchParams.get('authRequired') === '1';

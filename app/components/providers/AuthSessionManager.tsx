@@ -7,7 +7,9 @@ import {
   msUntilExpiry,
   isTokenExpired,
   refreshAccessToken,
-} from '@/lib/utils/auth';import { signOut, getSession } from 'next-auth/react';
+} from '@/lib/utils/auth';
+import { signOut, getSession } from 'next-auth/react';
+import { showExpiredPromptInPlace } from '@/lib/authPrompt';
 
 const REFRESH_AT_FRACTION = 0.8;
 const MIN_REFRESH_IN_MS = 60_000;
@@ -22,9 +24,29 @@ const MIN_REFRESH_IN_MS = 60_000;
  */
 export function AuthSessionManager() {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /**
+   * Was this visitor actually signed in? Guests have no token and no
+   * NextAuth session, which must NOT be mistaken for an expired session —
+   * otherwise every focus/visibility change bounces a guest to
+   * /?expired=1&authRequired=1&callbackUrl=… and pollutes the URL.
+   */
+  const wasAuthed = useRef(false);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
+
+    // Seed the flag from an existing token or live NextAuth session.
+    let cancelled = false;
+    (async () => {
+      try {
+        if (localStorage.getItem('accessToken')) {
+          wasAuthed.current = true;
+          return;
+        }
+        const session = await getSession();
+        if (!cancelled && session) wasAuthed.current = true;
+      } catch { /* ignore */ }
+    })();
 
     const clear = () => {
       if (timer.current) {
@@ -52,12 +74,20 @@ export function AuthSessionManager() {
 
     const onRefreshed = () => schedule();
     const onExpired = async () => {
+      // A guest was never signed in — nothing expired.
+      if (!wasAuthed.current) return;
+      wasAuthed.current = false;
       clear();
       try {
         await signOut({ redirect: false });
       } catch { /* already out */ }
-      // Storefront + login prompt: AuthPromptListener on `/` shows a
-      // "Session Expired" modal (never a hard /login bounce).
+      // Storefront + login prompt: show the "Session Expired" modal on top
+      // of the homepage. Only navigate when we're on another page; on `/`
+      // itself the modal opens in place, keeping the address bar clean.
+      if (window.location.pathname === '/') {
+        showExpiredPromptInPlace();
+        return;
+      }
       const back = `${window.location.pathname}${window.location.search}`;
       window.location.href = `/?expired=1&authRequired=1&callbackUrl=${encodeURIComponent(back)}`;
     };
@@ -65,14 +95,24 @@ export function AuthSessionManager() {
     const onFocus = async () => {
       try {
         const stored = localStorage.getItem('accessToken');
-        if (stored && isTokenExpired(stored)) {
-          await refreshAccessToken();
-          schedule();
-        } else {
-          // NextAuth session may have gone away in another tab.
-          const session = await getSession();
-          if (!session) onExpired();
+        if (stored) {
+          wasAuthed.current = true;
+          if (isTokenExpired(stored)) {
+            await refreshAccessToken();
+            schedule();
+          }
+          return;
         }
+        // No token and never authenticated in this tab: this is a guest,
+        // not an expired session. Leave the page and URL untouched.
+        if (!wasAuthed.current) return;
+        // NextAuth session may have gone away in another tab.
+        const session = await getSession();
+        if (session) {
+          wasAuthed.current = true;
+          return;
+        }
+        void onExpired();
       } catch { /* ignore */ }
     };
 
@@ -86,6 +126,7 @@ export function AuthSessionManager() {
     window.addEventListener('focus', onFocus);
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
+      cancelled = true;
       clear();
       window.removeEventListener(TOKEN_REFRESHED_EVENT, onRefreshed);
       window.removeEventListener(SESSION_EXPIRED_EVENT, onExpired);
