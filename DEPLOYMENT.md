@@ -67,6 +67,48 @@ Clear build cache & deploy.
 > (`next start` honours it automatically; the API falls back to 5000 only when
 > it is unset).
 
+### Option C — Keep the Node runtime (what the current services use)
+
+If you leave both services on the Node runtime, set these values instead:
+
+| Setting | Backend (`textile-crm-backend`) | Frontend (`textile-crm-frontend`) |
+|---------|--------------------------------|-----------------------------------|
+| Runtime | **Node** | **Node** |
+| Root Directory | `server` | `app` |
+| Build Command | `npm ci --include=dev; npm run build \|\| true; test -f dist/server.js` | `npm ci --include=dev; npm run build` |
+| Start Command | `node dist/server.js` | `npm start` |
+| Health Check Path | `/api/health` | *(leave empty)* |
+
+> **Gotchas verified live (2026-10-19 deploys):**
+> - Render sets `NODE_ENV=production` **before** the build, and modern npm skips
+>   `devDependencies` in that mode. Without `--include=dev` there is no
+>   TypeScript in `node_modules`, `tsc` falls through to a host's newer TS 7,
+>   and the build dies with `TS5108 moduleResolution=node10 has been removed`.
+> - `npm run build` (`tsc`) exits non-zero because of ~32 pre-existing type
+>   errors, but still emits `dist/server.js` — hence the `|| true` + `test -f`
+>   guard in the backend build command.
+> - `Docker` runtime instead? The Dockerfiles already handle all of this
+>   (`npm ci`, tolerant build) — Option A/B is then the better choice.
+> - The `caniuse-lite` override in both `package.json` files pins a real,
+>   published version; without it `npm ci` 404s on a corrupt registry pin
+>   (`1.0.30011761` — a version that never existed).
+
+## Seeding MongoDB Atlas from the local database
+
+The complete local database (`mongodb://localhost:27017/ecom`) was copied to
+Atlas with `server/scripts/copyLocalToAtlas.js` (21 collections, ~250 docs).
+
+```bash
+# Run from server/ — never put credentials in code
+export SRC_URI="mongodb://localhost:27017/ecom"
+export DST_URI="mongodb+srv://<user>:<pass>@cluster0.cht8d0g.mongodb.net/ecom?retryWrites=true&w=majority"
+node scripts/copyLocalToAtlas.js
+```
+
+It drops each target collection first (exact mirror; set `KEEP_TARGET=1` to
+append) and recreates all indexes (unique slugs/emails, TTLs, etc.).
+
+
 ---
 
 ## Environment variables
