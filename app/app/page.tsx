@@ -16,8 +16,7 @@ import { CustomerReviews } from '@/components/store/CustomerReviews';
 import { UgcReels } from '@/components/store/UgcReels';
 import { InstagramFeed } from '@/components/store/InstagramFeed';
 import { TrustBadges } from '@/components/store/TrustBadges';
-import { productsApi } from '@/lib/api/products';
-import { categoriesApi } from '@/lib/api/categories';
+import { serverGetJSON, type HomeProductPage, type HomeCategoryPage } from '@/lib/api/serverFetch';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export const metadata: Metadata = {
@@ -37,45 +36,31 @@ export const metadata: Metadata = {
 export const dynamic = 'force-dynamic';
 
 async function getHomeData() {
-  // Each fetch fails independently to [] so one slow/broken endpoint never
-  // blanks the whole homepage. Single parallel batch keeps TTFB to one hop.
-  // The race guarantees the batch resolves within TIMEOUT_MS even if the
-  // backend never answers (axios has a 30s cap; hotels/we wake services need less).
-  const TIMEOUT_MS = 12000;
-  const safe = <T,>(p: Promise<T>, fallback: T): Promise<T> =>
-    Promise.race([
-      p.catch(() => fallback),
-      new Promise<T>((resolve) => setTimeout(() => resolve(fallback), TIMEOUT_MS)),
-    ]);
-  try {
-    const [newArrivalsRes, trendingRes, bestSellersRes, topRatedRes, categoriesResponse] = await Promise.all([
-      safe(productsApi.getProducts({ status: 'active', limit: 10, sort: 'createdAt', order: 'desc' }), null),
-      safe(productsApi.getTrendingProducts(10), null),
-      safe(productsApi.getProducts({ status: 'active', limit: 10, sort: 'best-selling', order: 'desc' }), null),
-      safe(productsApi.getProducts({ status: 'active', limit: 10, sort: 'rating', order: 'desc' }), null),
-      safe(categoriesApi.getCategories('active'), null),
+  // Server-side fetches ride on native fetch (WHATWG URL internals) rather
+  // than axios/follow-redirects, so no DEP0169 url.parse() warnings fire
+  // during SSR. Each endpoint fails independently to [] so one slow or
+  // broken endpoint never blanks the homepage, and AbortSignal caps every
+  // call at 12s so a waking backend can never stall the render.
+  const [newArrivalsRes, trendingRes, bestSellersRes, topRatedRes, categoriesResponse] =
+    await Promise.all([
+      serverGetJSON<HomeProductPage>('/products?status=active&limit=10&sort=createdAt&order=desc'),
+      serverGetJSON<HomeProductPage>('/products/recommendations/trending?limit=10'),
+      serverGetJSON<HomeProductPage>('/products?status=active&limit=10&sort=best-selling&order=desc'),
+      serverGetJSON<HomeProductPage>('/products?status=active&limit=10&sort=rating&order=desc'),
+      serverGetJSON<HomeCategoryPage>('/categories?status=active'),
     ]);
 
-    // Trending needs recorded views/purchases — brand-new catalogs return [].
-    // Fall back to top-rated so the section never vanishes.
-    const topRated = topRatedRes?.data || [];
-    const trending = (trendingRes?.data || []).length > 0 ? trendingRes!.data : topRated;
+  // Trending needs recorded views/purchases — brand-new catalogs return [].
+  // Fall back to top-rated so the section never vanishes.
+  const topRated = topRatedRes?.data || [];
+  const trending = (trendingRes?.data || []).length > 0 ? trendingRes!.data : topRated;
 
-    return {
-      newArrivals: newArrivalsRes?.data || [],
-      trending,
-      bestSellers: bestSellersRes?.data || [],
-      categories: categoriesResponse?.data || [],
-    };
-  } catch (error) {
-    console.error('Failed to fetch home data:', error);
-    return {
-      newArrivals: [],
-      trending: [],
-      bestSellers: [],
-      categories: [],
-    };
-  }
+  return {
+    newArrivals: newArrivalsRes?.data || [],
+    trending: trending || [],
+    bestSellers: bestSellersRes?.data || [],
+    categories: categoriesResponse?.data || [],
+  };
 }
 
 function HomeLoadingSkeleton() {
