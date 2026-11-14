@@ -34,7 +34,7 @@ export function DashboardTopbar({ title, subtitle, onMenuToggle, homeHref = '/' 
         <h1 className="text-[13px] font-bold leading-tight truncate">{title}</h1>
         {subtitle && <p className="text-[11px] text-muted-foreground leading-tight truncate">{subtitle}</p>}
       </div>
-      <Link href="/track-order" className="hidden sm:flex items-center gap-1 text-[11px] font-semibold text-muted-foreground hover:text-amber-600 px-2 py-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
+      <Link href="/track-order" aria-label="Track orders" className="hidden sm:flex items-center gap-1 text-[11px] font-semibold text-muted-foreground hover:text-amber-600 px-2 py-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
         <Bell className="h-3.5 w-3.5" />
         {unread > 0 && <span className="min-w-[16px] h-4 px-1 rounded-full bg-amber-500 text-slate-950 text-[10px] font-bold flex items-center justify-center">{unread}</span>}
       </Link>

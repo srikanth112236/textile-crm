@@ -36,7 +36,7 @@ export default function UserDashboard() {
                 <c.icon className="h-5 w-5" />
               </div>
               <div className="min-w-0">
-                <h3 className="text-sm font-bold group-hover:text-amber-600">{c.title}</h3>
+                <h2 className="text-sm font-bold group-hover:text-amber-600">{c.title}</h2>
                 <p className="text-xs text-muted-foreground truncate">{c.desc}</p>
               </div>
             </div>

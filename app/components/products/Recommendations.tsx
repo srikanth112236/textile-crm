@@ -238,17 +238,17 @@ export const Recommendations: React.FC<RecommendationsProps> = ({
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
           <h2 className="text-2xl font-bold">Discover More</h2>
-          <TabsList>
-            <TabsTrigger value="similar">Similar Products</TabsTrigger>
-            <TabsTrigger value="personalized">
+          <TabsList className="max-w-full justify-start overflow-x-auto">
+            <TabsTrigger value="similar" className="shrink-0">Similar Products</TabsTrigger>
+            <TabsTrigger value="personalized" className="shrink-0">
               <Sparkles className="mr-2 h-4 w-4" />
               For You
             </TabsTrigger>
-            <TabsTrigger value="trending">
+            <TabsTrigger value="trending" className="shrink-0">
               <TrendingUp className="mr-2 h-4 w-4" />
               Trending
             </TabsTrigger>
-            <TabsTrigger value="recent">
+            <TabsTrigger value="recent" className="shrink-0">
               <Clock className="mr-2 h-4 w-4" />
               Recently Viewed
             </TabsTrigger>

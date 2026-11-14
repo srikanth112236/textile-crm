@@ -1,25 +1,44 @@
 import { Request, Response } from 'express';
-import { Category, ICategory } from '../models/Category';
+import { Category } from '../models/Category';
 import Joi from 'joi';
 
 // Validation schemas
 const createCategorySchema = Joi.object({
   name: Joi.string().max(100).trim().required(),
   slug: Joi.string().pattern(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).lowercase().trim().required(),
-  description: Joi.string().max(500).trim().optional().allow(''),
+  description: Joi.string().max(500).trim().optional().allow('', null),
   parent: Joi.string().regex(/^[0-9a-fA-F]{24}$/).optional().allow(null, ''),
-  image: Joi.string().trim().max(500).optional().allow(''),
+  image: Joi.string().trim().max(500).optional().allow('', null),
+  // Legacy alias accepted so older clients sending `imageUrl` keep working.
+  imageUrl: Joi.string().trim().max(500).optional().allow('', null),
   status: Joi.string().valid('active', 'inactive').default('active'),
 });
 
 const updateCategorySchema = Joi.object({
   name: Joi.string().max(100).trim().optional(),
   slug: Joi.string().pattern(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).lowercase().trim().optional(),
-  description: Joi.string().max(500).trim().optional().allow(''),
+  description: Joi.string().max(500).trim().optional().allow('', null),
   parent: Joi.string().regex(/^[0-9a-fA-F]{24}$/).optional().allow(null, ''),
-  image: Joi.string().trim().max(500).optional().allow(''),
+  image: Joi.string().trim().max(500).optional().allow('', null),
+  // Legacy alias accepted so older clients sending `imageUrl` keep working.
+  imageUrl: Joi.string().trim().max(500).optional().allow('', null),
   status: Joi.string().valid('active', 'inactive').optional(),
 });
+
+// Normalise the request body: map the legacy `imageUrl` alias onto `image`,
+// and turn empty parent/image strings into values Mongoose can cast.
+const normalizeCategoryPayload = (value: any): any => {
+  if (value.imageUrl !== undefined && (value.image === undefined || value.image === null || value.image === '')) {
+    value.image = value.imageUrl;
+  }
+  delete value.imageUrl;
+
+  if (value.parent === '') {
+    value.parent = null;
+  }
+
+  return value;
+};
 
 // Get all categories (tree structure)
 export const getCategories = async (req: Request, res: Response): Promise<void> => {
@@ -38,8 +57,20 @@ export const getCategories = async (req: Request, res: Response): Promise<void> 
       .lean();
 
     // Build tree structure
-    const categoryMap = new Map();
+    const categoryMap = new Map<string, any>();
     const rootCategories: any[] = [];
+
+    // `parent` is populated, so it may be either an ObjectId or a plain
+    // object ({ _id, name, slug }). Normalise it to a string id first —
+    // calling toString() on the populated object yields "[object Object]",
+    // which broke nesting and pushed every child into the root list.
+    const parentIdOf = (cat: any): string | null => {
+      const parent = cat.parent;
+      if (!parent) return null;
+      if (typeof parent === 'string') return parent;
+      if (parent._id) return parent._id.toString();
+      return parent.toString();
+    };
 
     // First pass: create map of all categories
     categories.forEach((cat: any) => {
@@ -49,10 +80,11 @@ export const getCategories = async (req: Request, res: Response): Promise<void> 
     // Second pass: build tree
     categories.forEach((cat: any) => {
       const categoryNode = categoryMap.get(cat._id.toString());
-      if (!cat.parent) {
+      const parentId = parentIdOf(cat);
+      if (!parentId) {
         rootCategories.push(categoryNode);
       } else {
-        const parentNode = categoryMap.get(cat.parent.toString());
+        const parentNode = categoryMap.get(parentId);
         if (parentNode) {
           parentNode.children.push(categoryNode);
         } else {
@@ -105,10 +137,12 @@ export const createCategory = async (req: Request, res: Response): Promise<void>
     if (error) {
       res.status(400).json({
         error: 'Validation error',
-        details: error.details.map((detail) => detail.message),
+        details: error.details.map((detail) => detail.message.replace(/"/g, '')),
       });
       return;
     }
+
+    normalizeCategoryPayload(value);
 
     // Validate parent exists if provided
     if (value.parent) {
@@ -142,7 +176,11 @@ export const createCategory = async (req: Request, res: Response): Promise<void>
       res.status(400).json({ error: 'Category with this slug already exists' });
       return;
     }
-    res.status(500).json({ error: 'Internal server error' });
+    if (error.name === 'ValidationError' || error.name === 'CastError') {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+    res.status(500).json({ error: error.message || 'Internal server error' });
   }
 };
 
@@ -159,10 +197,12 @@ export const updateCategory = async (req: Request, res: Response): Promise<void>
     if (error) {
       res.status(400).json({
         error: 'Validation error',
-        details: error.details.map((detail) => detail.message),
+        details: error.details.map((detail) => detail.message.replace(/"/g, '')),
       });
       return;
     }
+
+    normalizeCategoryPayload(value);
 
     const category = await Category.findById(id);
 
@@ -181,6 +221,23 @@ export const updateCategory = async (req: Request, res: Response): Promise<void>
       if (!parentExists) {
         res.status(400).json({ error: 'Parent category not found' });
         return;
+      }
+
+      // Walk up from the proposed parent: if we reach this category, the
+      // proposed parent is one of its own descendants (circular hierarchy).
+      let cursor: any = parentExists;
+      let depth = 0;
+      while (cursor && depth < 20) {
+        if (cursor.parent) {
+          if (cursor.parent.toString() === id) {
+            res.status(400).json({ error: 'A category cannot be nested under one of its own sub-categories' });
+            return;
+          }
+          cursor = await Category.findById(cursor.parent).select('parent');
+        } else {
+          break;
+        }
+        depth++;
       }
     }
 
@@ -214,7 +271,11 @@ export const updateCategory = async (req: Request, res: Response): Promise<void>
       res.status(400).json({ error: 'Category with this slug already exists' });
       return;
     }
-    res.status(500).json({ error: 'Internal server error' });
+    if (error.name === 'ValidationError' || error.name === 'CastError') {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+    res.status(500).json({ error: error.message || 'Internal server error' });
   }
 };
 
@@ -239,8 +300,15 @@ export const deleteCategory = async (req: Request, res: Response): Promise<void>
       return;
     }
 
-    // Check if category has products (in future, we'll check Product model)
-    // For now, we'll just delete it
+    // Check if any products still reference this category
+    const { Product } = await import('../models/Product');
+    const productCount = await Product.countDocuments({ category: id });
+    if (productCount > 0) {
+      res.status(400).json({
+        error: `Cannot delete category: ${productCount} product${productCount === 1 ? ' is' : 's are'} assigned to it. Reassign or delete those products first.`,
+      });
+      return;
+    }
 
     await Category.findByIdAndDelete(id);
 

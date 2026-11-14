@@ -138,6 +138,7 @@ function SortableImageItem({
           <div
             {...attributes}
             {...listeners}
+            aria-label={`Drag to reorder image ${index + 1}`}
             className="absolute top-2 left-2 bg-black/50 hover:bg-black/70 text-white p-1.5 rounded cursor-grab active:cursor-grabbing transition-colors hidden md:block"
           >
             <GripVertical className="h-4 w-4" />

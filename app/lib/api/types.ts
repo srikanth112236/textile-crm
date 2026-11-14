@@ -149,7 +149,7 @@ export interface IProduct {
   
   // Media
   images: (string | { url: string; altText?: string; title?: string; position?: number })[];
-  videos?: Array<{ url: string; thumbnailUrl?: string; title?: string }>;
+  videos?: Array<{ url: string; thumbnailUrl?: string; title?: string; enabled?: boolean }>;
   
   // Advanced Variants
   hasVariants?: boolean;

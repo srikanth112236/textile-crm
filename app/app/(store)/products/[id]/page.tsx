@@ -35,7 +35,11 @@ export async function generateMetadata({ params }: ProductDetailPageProps): Prom
   }
 
   const metaTitle = product.metadata?.metaTitle || product.name;
-  const metaDescription = product.metadata?.metaDescription || product.description;
+  const rawDescription = product.metadata?.metaDescription || product.description || '';
+  const metaDescription =
+    rawDescription.length > 160
+      ? `${rawDescription.slice(0, 157).trimEnd()}...`
+      : rawDescription;
   const ogImage = product.metadata?.ogImage || (product.images && product.images.length > 0
     ? (typeof product.images[0] === 'string' ? product.images[0] : product.images[0].url)
     : '');
@@ -73,17 +77,26 @@ export default async function ProductDetailPage(props: ProductDetailPageProps) {
   }
 
   // Structured data for SEO
+  const siteUrl =
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    process.env.NEXTAUTH_URL ||
+    'http://localhost:3001';
+  const absoluteImage = (img: string) => (img.startsWith('http') ? img : `${siteUrl}${img.startsWith('/') ? '' : '/'}${img}`);
   const structuredData = {
     '@context': 'https://schema.org',
     '@type': 'Product',
     name: product.name,
     description: product.description,
-    image: product.images?.map(img => typeof img === 'string' ? img : img.url) || [],
+    sku: product._id,
+    url: `${siteUrl}/products/${product._id}`,
+    brand: { '@type': 'Brand', name: 'Mentoos' },
+    image: product.images?.map(img => absoluteImage(typeof img === 'string' ? img : img.url)) || [],
     offers: {
       '@type': 'Offer',
       price: product.price,
-      priceCurrency: 'USD',
+      priceCurrency: 'INR',
       availability: product.stock > 0 ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
+      url: `${siteUrl}/products/${product._id}`,
     },
     aggregateRating: product.averageRating && product.totalReviews ? {
       '@type': 'AggregateRating',
@@ -92,11 +105,21 @@ export default async function ProductDetailPage(props: ProductDetailPageProps) {
     } : undefined,
   };
 
+  const breadcrumbData = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Home', item: siteUrl },
+      { '@type': 'ListItem', position: 2, name: 'Products', item: `${siteUrl}/products` },
+      { '@type': 'ListItem', position: 3, name: product.name, item: `${siteUrl}/products/${product._id}` },
+    ],
+  };
+
   return (
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify([structuredData, breadcrumbData]) }}
       />
       <ProductDetailClient product={product} />
     </>

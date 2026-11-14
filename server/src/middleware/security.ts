@@ -15,6 +15,9 @@ export const helmetMiddleware = helmet({
     },
   },
   crossOriginEmbedderPolicy: false,
+  // Uploaded product videos are played directly from the API origin by the
+  // storefront, so media must be fetchable cross-origin.
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
 });
 
 // CORS configuration
@@ -32,7 +35,7 @@ export const corsMiddleware = cors({
 // plain-English "try again in N seconds" countdown.
 export const rateLimitMiddleware = rateLimit({
   windowMs: 60 * 1000, // 1 minute
-  max: 300, // 300 requests per minute per IP — normal browsing stays far below
+  max: 1200, // per IP per minute — storefront pages fire 5–15 API calls each
   standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
   handler: (req, res) => {
@@ -71,6 +74,21 @@ export const gdprRateLimit = rateLimit({
   legacyHeaders: false,
   skipSuccessfulRequests: false, // Count all requests, not just failed ones
   skipFailedRequests: false,
+});
+
+// Shipping quote endpoint is public (guest checkout) and hits Shiprocket,
+// so it gets its own tighter cap to protect the courier API quota.
+export const shippingQuoteRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60, // per IP per minute — a shopper rarely exceeds a handful
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (_req, res) => {
+    res.status(429).json({
+      error: 'Too many shipping quotes requested. Please wait a moment and try again.',
+      retryAfterSeconds: 30,
+    });
+  },
 });
 
 // HTTPS enforcement middleware (production only)

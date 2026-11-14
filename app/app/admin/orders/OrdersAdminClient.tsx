@@ -1,14 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   getAllOrders,
+  getOrderStats,
   updateOrderStatus,
   confirmPayment,
   refundOrder,
   Order,
+  OrderStats,
   OrderStatus,
   PaymentStatus,
   UpdateOrderStatusRequest,
@@ -45,7 +47,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { formatPrice } from '@/lib/utils';
+import { formatPrice, cn } from '@/lib/utils';
 import { Eye, CheckCircle2, XCircle, RefreshCw, DollarSign, Loader2 } from 'lucide-react';
 import {
   AdminTable,
@@ -80,21 +82,36 @@ const getStatusLabel = (status: OrderStatus): string => {
   return status.charAt(0).toUpperCase() + status.slice(1);
 };
 
+const PAGE_SIZE = 20;
+
 export default function OrdersAdminClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
+
+  // The URL is the single source of truth for filters. Sidebar links such as
+  // /admin/orders?status=processing now always render matching rows (a local
+  // state copy used to go stale and keep showing every status).
+  const statusParam = searchParams.get('status') || '';
+  const paymentParam = searchParams.get('paymentStatus') || '';
+  const statusFilter = Object.values(OrderStatus).includes(statusParam as OrderStatus)
+    ? (statusParam as OrderStatus)
+    : undefined;
+  const paymentStatusFilter = Object.values(PaymentStatus).includes(paymentParam as PaymentStatus)
+    ? (paymentParam as PaymentStatus)
+    : undefined;
+  const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1);
+  const urlSearch = searchParams.get('q') || '';
+
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
-  const [pagination, setPagination] = useState({
-    page: 1,
-    limit: 20,
-    total: 0,
-    pages: 0,
-  });
-  const [statusFilter, setStatusFilter] = useState<OrderStatus | undefined>(undefined);
-  const [paymentStatusFilter, setPaymentStatusFilter] = useState<PaymentStatus | undefined>(undefined);
-  const [orderNumberFilter, setOrderNumberFilter] = useState('');
+  const [pagination, setPagination] = useState({ page: 1, limit: PAGE_SIZE, total: 0, pages: 0 });
+  const [stats, setStats] = useState<OrderStats | null>(null);
+  const [searchInput, setSearchInput] = useState(urlSearch);
+  const [searchTerm, setSearchTerm] = useState(urlSearch);
+  const searchBoxRef = useRef<HTMLInputElement>(null);
+  const requestRef = useRef(0);
+
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [updateStatusDialog, setUpdateStatusDialog] = useState(false);
   const [confirmPaymentDialog, setConfirmPaymentDialog] = useState(false);
@@ -111,30 +128,61 @@ export default function OrdersAdminClient() {
   const [refundBankIfsc, setRefundBankIfsc] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
 
-  const fetchOrders = async () => {
+  // Keep the search box aligned with sidebar / back-forward navigation.
+  useEffect(() => {
+    setSearchTerm(urlSearch);
+    // Don't overwrite what the user is currently typing.
+    if (searchBoxRef.current && document.activeElement === searchBoxRef.current) return;
+    setSearchInput(urlSearch);
+  }, [urlSearch]);
+
+  // Debounce typing, then reflect it in the URL.
+  useEffect(() => {
+    const timer = setTimeout(() => setSearchTerm(searchInput.trim()), 400);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  useEffect(() => {
+    if (searchTerm === urlSearch) return;
+    const params = new URLSearchParams(searchParams.toString());
+    if (searchTerm) params.set('q', searchTerm);
+    else params.delete('q');
+    params.delete('page');
+    const qs = params.toString();
+    router.replace(qs ? `/admin/orders?${qs}` : '/admin/orders', { scroll: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTerm]);
+
+  const fetchStats = useCallback(async () => {
+    try {
+      const res = await getOrderStats();
+      if (res.success) setStats(res.data);
+    } catch {
+      /* counters are non-critical — keep the page usable */
+    }
+  }, []);
+
+  const fetchOrders = useCallback(async () => {
+    const requestId = ++requestRef.current;
     setLoading(true);
     try {
       const response = await getAllOrders(
-        pagination.page,
-        pagination.limit,
+        page,
+        PAGE_SIZE,
         statusFilter,
         paymentStatusFilter,
-        undefined
+        undefined,
+        searchTerm || undefined
       );
+      // Ignore a slow response from an older filter (this used to overwrite
+      // the filtered list with unfiltered rows).
+      if (requestId !== requestRef.current) return;
       if (response.success && response.data) {
-        let filteredOrders = response.data.orders || [];
-        
-        // Filter by order number if provided
-        if (orderNumberFilter.trim()) {
-          filteredOrders = filteredOrders.filter((order) =>
-            order.orderNumber.toLowerCase().includes(orderNumberFilter.toLowerCase())
-          );
-        }
-        
-        setOrders(filteredOrders);
-        setPagination(response.data.pagination || pagination);
+        setOrders(response.data.orders || []);
+        setPagination(response.data.pagination || { page, limit: PAGE_SIZE, total: 0, pages: 0 });
       }
     } catch (error: any) {
+      if (requestId !== requestRef.current) return;
       console.error('Failed to fetch orders:', error);
       toast({
         title: 'Error',
@@ -142,43 +190,46 @@ export default function OrdersAdminClient() {
         variant: 'destructive',
       });
     } finally {
-      setLoading(false);
+      if (requestId === requestRef.current) setLoading(false);
     }
+  }, [page, statusFilter, paymentStatusFilter, searchTerm, toast]);
+
+  useEffect(() => {
+    fetchOrders();
+  }, [fetchOrders]);
+
+  useEffect(() => {
+    fetchStats();
+    // Keep tab counters live while the page is open (e.g. storefront orders).
+    const timer = setInterval(fetchStats, 60000);
+    return () => clearInterval(timer);
+  }, [fetchStats]);
+
+  const updateUrl = (updates: Record<string, string | null>, mode: 'push' | 'replace' = 'push') => {
+    const params = new URLSearchParams(searchParams.toString());
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value === null || value === '') params.delete(key);
+      else params.set(key, value);
+    });
+    if (!('page' in updates)) params.delete('page');
+    const qs = params.toString();
+    const url = qs ? `/admin/orders?${qs}` : '/admin/orders';
+    if (mode === 'push') router.push(url, { scroll: false });
+    else router.replace(url, { scroll: false });
   };
 
-  useEffect(() => {
-    // Read filters from URL params
-    const status = searchParams.get('status');
-    const paymentStatus = searchParams.get('paymentStatus');
-    
-    if (status && Object.values(OrderStatus).includes(status as OrderStatus)) {
-      setStatusFilter(status as OrderStatus);
-    }
-    if (paymentStatus && Object.values(PaymentStatus).includes(paymentStatus as PaymentStatus)) {
-      setPaymentStatusFilter(paymentStatus as PaymentStatus);
-    }
-    
-    fetchOrders();
-  }, [pagination.page, statusFilter, paymentStatusFilter]);
-
-  useEffect(() => {
-    // Debounce order number filter
-    const timer = setTimeout(() => {
-      fetchOrders();
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [orderNumberFilter]);
-
   const handleStatusFilterChange = (value: string) => {
-    setStatusFilter(value === 'all' ? undefined : (value as OrderStatus));
-    setPagination({ ...pagination, page: 1 });
-    router.push(`/admin/orders?status=${value === 'all' ? '' : value}&paymentStatus=${paymentStatusFilter || ''}`);
+    updateUrl({ status: value === 'all' ? null : value });
   };
 
   const handlePaymentStatusFilterChange = (value: string) => {
-    setPaymentStatusFilter(value === 'all' ? undefined : (value as PaymentStatus));
-    setPagination({ ...pagination, page: 1 });
-    router.push(`/admin/orders?status=${statusFilter || ''}&paymentStatus=${value === 'all' ? '' : value}`);
+    updateUrl({ paymentStatus: value === 'all' ? null : value });
+  };
+
+  const refreshAll = async () => {
+    await Promise.all([fetchOrders(), fetchStats()]);
+    // Let the sidebar refresh its counters immediately after a status change.
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event('admin:orders-changed'));
   };
 
   const handleUpdateStatus = async () => {
@@ -197,7 +248,7 @@ export default function OrdersAdminClient() {
       });
       setUpdateStatusDialog(false);
       setStatusNotes('');
-      await fetchOrders();
+      await refreshAll();
     } catch (error: any) {
       toast({
         title: 'Error',
@@ -223,7 +274,7 @@ export default function OrdersAdminClient() {
       });
       setConfirmPaymentDialog(false);
       setPaymentNotes('');
-      await fetchOrders();
+      await refreshAll();
     } catch (error: any) {
       toast({
         title: 'Error',
@@ -279,7 +330,7 @@ export default function OrdersAdminClient() {
       setRefundBankName('');
       setRefundBankAccount('');
       setRefundBankIfsc('');
-      await fetchOrders();
+      await refreshAll();
     } catch (error: any) {
       toast({
         title: 'Error',
@@ -316,26 +367,77 @@ export default function OrdersAdminClient() {
     setRefundDialog(true);
   };
 
+  const tabItems = [
+    { key: 'all', label: 'All Orders', href: '/admin/orders', count: stats?.total },
+    { key: OrderStatus.PENDING, label: 'Pending', href: '/admin/orders?status=pending', count: stats?.byStatus?.pending },
+    { key: OrderStatus.PROCESSING, label: 'Processing', href: '/admin/orders?status=processing', count: stats?.byStatus?.processing },
+    { key: OrderStatus.DELIVERED, label: 'Delivered', href: '/admin/orders?status=delivered', count: stats?.byStatus?.delivered },
+    { key: 'returns', label: 'Returns & Exchange', href: '/admin/returns', count: stats?.returns?.total },
+  ];
+  const isTabActive = (key: string) => (key === 'all' ? !statusFilter : statusFilter === key);
+  const pendingPayments = stats?.byPaymentStatus?.pending ?? 0;
+
   return (
     <div className="container mx-auto px-3 py-4 max-w-7xl">
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-xl font-bold tracking-tight">Order Management</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <div>
+          <h1 className="text-xl font-bold tracking-tight">Order Management</h1>
+          <p className="text-xs text-muted-foreground">
+            {stats ? `${stats.total} total orders · ${pendingPayments} awaiting payment` : 'Loading order summary…'}
+          </p>
+        </div>
+        <Button variant="outline" size="sm" onClick={refreshAll} disabled={loading} className="h-8">
+          <RefreshCw className={cn('mr-1.5 h-3.5 w-3.5', loading && 'animate-spin')} /> Refresh
+        </Button>
+      </div>
+
+      {/* Accurate status tabs (same numbers as the admin sidebar) */}
+      <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+        {tabItems.map((tab) => {
+          const active = isTabActive(tab.key);
+          return (
+            <Link
+              key={tab.key}
+              href={tab.href}
+              className={cn(
+                'rounded-xl border bg-white px-3 py-2.5 transition-all dark:bg-slate-900',
+                active
+                  ? 'border-amber-500 ring-1 ring-amber-500/30'
+                  : 'border-slate-200 hover:border-amber-300 dark:border-slate-800 dark:hover:border-amber-700'
+              )}
+              aria-current={active ? 'page' : undefined}
+            >
+              <span
+                className={cn(
+                  'block text-[10px] font-extrabold uppercase tracking-widest',
+                  active ? 'text-amber-600 dark:text-amber-400' : 'text-slate-500'
+                )}
+              >
+                {tab.label}
+              </span>
+              <span className="mt-0.5 block text-xl font-extrabold tabular-nums">
+                {tab.count ?? '—'}
+              </span>
+            </Link>
+          );
+        })}
       </div>
 
       {/* Filters */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
         <div>
-          <Label>Order Number</Label>
+          <Label>Search</Label>
           <Input
-            placeholder="Search by order number..."
-            value={orderNumberFilter}
-            onChange={(e) => setOrderNumberFilter(e.target.value)}
+            ref={searchBoxRef}
+            placeholder="Order #, customer name, email, phone or AWB…"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
           />
         </div>
         <div>
           <Label>Status</Label>
           <Select value={statusFilter || 'all'} onValueChange={handleStatusFilterChange}>
-            <SelectTrigger>
+            <SelectTrigger aria-label="Filter orders by status">
               <SelectValue placeholder="All Statuses" />
             </SelectTrigger>
             <SelectContent>
@@ -351,7 +453,7 @@ export default function OrdersAdminClient() {
         <div>
           <Label>Payment Status</Label>
           <Select value={paymentStatusFilter || 'all'} onValueChange={handlePaymentStatusFilterChange}>
-            <SelectTrigger>
+            <SelectTrigger aria-label="Filter orders by payment status">
               <SelectValue placeholder="All Payment Statuses" />
             </SelectTrigger>
             <SelectContent>
@@ -367,11 +469,28 @@ export default function OrdersAdminClient() {
       </div>
 
       {/* Active Filter Indicators */}
-      <div className="flex flex-wrap gap-1.5 mb-2">
+      <div className="flex flex-wrap items-center gap-1.5 mb-2">
         {statusFilter && <Badge className="bg-amber-500 text-slate-950 text-[10px] font-extrabold">Status: {getStatusLabel(statusFilter)}</Badge>}
         {paymentStatusFilter && <Badge className="bg-violet-500 text-white text-[10px] font-extrabold">Payment: {paymentStatusFilter}</Badge>}
-        {(statusFilter || paymentStatusFilter) && (
-          <Button size="sm" variant="outline" className="h-5 px-2 text-[10px] font-extrabold" onClick={() => { setStatusFilter(undefined); setPaymentStatusFilter(undefined); setPagination({ ...pagination, page: 1 }); router.push('/admin/orders'); }}>Clear filters</Button>
+        {searchTerm && <Badge className="bg-sky-600 text-white text-[10px] font-extrabold">Search: {searchTerm}</Badge>}
+        {(statusFilter || paymentStatusFilter || searchTerm) && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-5 px-2 text-[10px] font-extrabold"
+            onClick={() => {
+              setSearchInput('');
+              setSearchTerm('');
+              router.push('/admin/orders');
+            }}
+          >
+            Clear filters
+          </Button>
+        )}
+        {pagination.total > 0 && (
+          <span className="ml-auto text-[11px] font-medium text-muted-foreground">
+            {pagination.total} {pagination.total === 1 ? 'order' : 'orders'} matching
+          </span>
         )}
       </div>
 
@@ -496,19 +615,19 @@ export default function OrdersAdminClient() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setPagination({ ...pagination, page: pagination.page - 1 })}
-                disabled={pagination.page === 1}
+                onClick={() => updateUrl({ page: String(page - 1) })}
+                disabled={page <= 1 || loading}
               >
                 Previous
               </Button>
               <span className="text-sm text-muted-foreground">
-                Page {pagination.page} of {pagination.pages}
+                Page {page} of {pagination.pages}
               </span>
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setPagination({ ...pagination, page: pagination.page + 1 })}
-                disabled={pagination.page === pagination.pages}
+                onClick={() => updateUrl({ page: String(page + 1) })}
+                disabled={page >= pagination.pages || loading}
               >
                 Next
               </Button>

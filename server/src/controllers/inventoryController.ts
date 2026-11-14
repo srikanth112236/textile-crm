@@ -22,9 +22,9 @@ const createWarehouseSchema = Joi.object({
     country: Joi.string().trim().required().max(100),
   }).required(),
   contact: Joi.object({
-    name: Joi.string().trim().max(100).optional(),
-    email: Joi.string().email().optional(),
-    phone: Joi.string().trim().max(20).optional(),
+    name: Joi.string().trim().max(100).optional().allow(''),
+    email: Joi.string().email().optional().allow(''),
+    phone: Joi.string().trim().max(20).optional().allow(''),
   }).optional(),
   settings: Joi.object({
     priority: Joi.number().min(0).default(0),

@@ -33,6 +33,17 @@ export default function SettingsClient() {
       try {
         const data = await settingsApi.getAdmin();
         if (data?.payments) delete data.payments.razorpayKeyId;
+        // Legacy values (e.g. 49) are snapped to the supported ₹50/₹55/₹60 options.
+        if (data?.shipping) {
+          const flat = Number(data.shipping.flatShippingCost);
+          const options = [50, 55, 60];
+          if (!options.includes(flat)) {
+            data.shipping.flatShippingCost = options.reduce(
+              (best, v) => (Math.abs(v - flat) < Math.abs(best - flat) ? v : best),
+              options[0]
+            );
+          }
+        }
         setForm(data);
       } catch (e: any) {
         toast({ title: 'Failed to load settings', description: e.message, variant: 'destructive' });
@@ -62,6 +73,10 @@ export default function SettingsClient() {
     try {
       const payments = { ...(form.payments || {}) };
       delete payments.razorpayKeyId;
+      // Drop blank rows before persisting the marquee list.
+      const announcements = ((form.storefront?.announcements || []) as string[])
+        .map((m) => (m || '').trim())
+        .filter((m) => m.length > 0);
       const payload = {
         codConfirmation: form.codConfirmation,
         shipping: form.shipping,
@@ -69,7 +84,7 @@ export default function SettingsClient() {
         shipment: form.shipment,
         refunds: form.refunds,
         whatsapp: form.whatsapp,
-        storefront: form.storefront,
+        storefront: { ...(form.storefront || {}), announcements },
       };
       await settingsApi.updateAdmin(payload);
       toast({ title: 'Settings saved', description: 'All changes applied successfully.' });
@@ -84,7 +99,7 @@ export default function SettingsClient() {
   if (!form) return <div className="p-8 text-sm">No settings found.</div>;
 
   return (
-    <div className="px-3 py-4 space-y-4 max-w-5xl mx-auto">
+    <div className="w-full px-3 py-3 sm:px-4 lg:px-5 space-y-3">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
         <div className="flex items-center gap-2.5">
@@ -111,7 +126,7 @@ export default function SettingsClient() {
         </div>
         <CardContent className="p-3.5 grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-3 py-3">
-            <Switch className="h-4 w-7" checked={form.codConfirmation?.enabled} onCheckedChange={(c) => setDeep('codConfirmation.enabled', c)} />
+            <Switch aria-label="COD confirmation enabled" className="h-4 w-7" checked={form.codConfirmation?.enabled} onCheckedChange={(c) => setDeep('codConfirmation.enabled', c)} />
             <div className="min-w-0">
               <p className="text-[11px] font-bold leading-tight">Enabled</p>
               <p className="text-[9px] text-muted-foreground leading-tight">Can receive COD orders</p>
@@ -121,7 +136,7 @@ export default function SettingsClient() {
           <div>
             <Label className="text-[11px] font-bold">Mode</Label>
             <Select value={form.codConfirmation?.mode || 'fixed'} onValueChange={(v) => setDeep('codConfirmation.mode', v)}>
-              <SelectTrigger className="h-9 rounded-lg text-[11px] mt-1"><SelectValue /></SelectTrigger>
+              <SelectTrigger aria-label="COD confirmation mode" className="h-9 rounded-lg text-[11px] mt-1"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="fixed" className="text-[11px]">Fixed ₹</SelectItem>
                 <SelectItem value="percent" className="text-[11px]">Percent %</SelectItem>
@@ -134,6 +149,7 @@ export default function SettingsClient() {
             <Label className="text-[11px] font-bold">Default advance ₹</Label>
             <div className="flex gap-1.5 mt-1">
               <Input
+                aria-label="Default COD advance amount"
                 type="number"
                 value={form.codConfirmation?.defaultAmount ?? 0}
                 onChange={(e) => setDeep('codConfirmation.defaultAmount', Number(e.target.value))}
@@ -158,6 +174,7 @@ export default function SettingsClient() {
           <div>
             <Label className="text-[11px] font-bold">Fixed options</Label>
             <Input
+              aria-label="COD fixed advance options"
               value={(form.codConfirmation?.fixedOptions || []).join(',')}
               onChange={(e) => setDeep('codConfirmation.fixedOptions', e.target.value.split(',').map((x: string) => Number(x.trim())).filter((x) => !isNaN(x)))}
               placeholder="49, 99, 149, 199"
@@ -170,6 +187,7 @@ export default function SettingsClient() {
           <div>
             <Label className="text-[11px] font-bold">Percent % (if mode=percent)</Label>
             <Input
+              aria-label="COD percent value"
               type="number"
               value={form.codConfirmation?.percentValue ?? 0}
               onChange={(e) => setDeep('codConfirmation.percentValue', Number(e.target.value))}
@@ -179,6 +197,7 @@ export default function SettingsClient() {
           <div>
             <Label className="text-[11px] font-bold">Percent max cap ₹ (0 = no cap)</Label>
             <Input
+              aria-label="COD percent maximum cap"
               type="number"
               value={form.codConfirmation?.percentMaxCap ?? 0}
               onChange={(e) => setDeep('codConfirmation.percentMaxCap', Number(e.target.value) || null)}
@@ -188,6 +207,7 @@ export default function SettingsClient() {
           <div>
             <Label className="text-[11px] font-bold">Min order for COD ₹</Label>
             <Input
+              aria-label="Minimum order value for COD"
               type="number"
               value={form.codConfirmation?.minOrderValueForCOD ?? 0}
               onChange={(e) => setDeep('codConfirmation.minOrderValueForCOD', Number(e.target.value))}
@@ -197,6 +217,7 @@ export default function SettingsClient() {
           <div>
             <Label className="text-[11px] font-bold">Max order for COD ₹ (0 = no cap)</Label>
             <Input
+              aria-label="Maximum order value for COD"
               type="number"
               value={form.codConfirmation?.maxOrderValueForCOD ?? 0}
               onChange={(e) => setDeep('codConfirmation.maxOrderValueForCOD', Number(e.target.value) || null)}
@@ -215,6 +236,7 @@ export default function SettingsClient() {
               <div>
                 <Label className="text-[9px] font-bold text-muted-foreground">Mode</Label>
                 <Input
+                  aria-label="COD pincode mode"
                   value={form.codConfirmation?.pincodeMode || 'none'}
                   onChange={(e) => setDeep('codConfirmation.pincodeMode', e.target.value)}
                   placeholder="none / block / allow"
@@ -224,6 +246,7 @@ export default function SettingsClient() {
               <div className="col-span-2">
                 <Label className="text-[9px] font-bold text-muted-foreground">Pincodes (comma separated 6-digit)</Label>
                 <Input
+                  aria-label="COD pincodes"
                   value={(form.codConfirmation?.pincodes || []).join(', ')}
                   onChange={(e) => setDeep('codConfirmation.pincodes', e.target.value.split(',').map((x: string) => x.trim()).filter((x) => /^\d{6}$/.test(x)))}
                   placeholder="110001, 400001"
@@ -241,6 +264,7 @@ export default function SettingsClient() {
               <div>
                 <Label className="text-[9px] font-bold">Trusted orders to waive</Label>
                 <Input
+                  aria-label="Trusted orders to waive COD advance"
                   type="number"
                   value={form.codConfirmation?.trustedMinDelivered ?? 2}
                   onChange={(e) => setDeep('codConfirmation.trustedMinDelivered', Number(e.target.value))}
@@ -250,6 +274,7 @@ export default function SettingsClient() {
               <div>
                 <Label className="text-[9px] font-bold">Risk threshold ₹ (0 = off)</Label>
                 <Input
+                  aria-label="COD risk threshold"
                   type="number"
                   value={form.codConfirmation?.riskThreshold || 0}
                   onChange={(e) => setDeep('codConfirmation.riskThreshold', Number(e.target.value))}
@@ -259,6 +284,7 @@ export default function SettingsClient() {
               <div>
                 <Label className="text-[9px] font-bold">Risk advance ₹</Label>
                 <Input
+                  aria-label="COD risk advance"
                   type="number"
                   value={form.codConfirmation?.riskAdvance ?? 149}
                   onChange={(e) => setDeep('codConfirmation.riskAdvance', Number(e.target.value))}
@@ -279,11 +305,11 @@ export default function SettingsClient() {
         </div>
         <CardContent className="p-3.5 grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="flex items-center gap-2">
-            <Switch className="h-4 w-7" checked={form.shipping?.shiprocketEnabled !== false} onCheckedChange={(c) => setDeep('shipment.shiprocketEnabled', c)} />
+            <Switch aria-label="Shiprocket enabled" className="h-4 w-7" checked={form.shipment?.shiprocketEnabled !== false} onCheckedChange={(c) => setDeep('shipment.shiprocketEnabled', c)} />
             <Label className="text-[11px] font-bold leading-tight">Shiprocket enabled</Label>
           </div>
           <div className="flex items-center gap-2">
-            <Switch className="h-4 w-7" checked={form.shipment?.autoPush !== false} onCheckedChange={(c) => setDeep('shipment.autoPush', c)} />
+            <Switch aria-label="Auto-push orders to Shiprocket" className="h-4 w-7" checked={form.shipment?.autoPush !== false} onCheckedChange={(c) => setDeep('shipment.autoPush', c)} />
             <Label className="text-[11px] font-bold leading-tight">Auto-push orders</Label>
           </div>
         </CardContent>
@@ -291,6 +317,7 @@ export default function SettingsClient() {
           <div>
             <Label className="text-[11px] font-bold">Pickup location</Label>
             <Input
+              aria-label="Shiprocket pickup location"
               value={form.shipment?.pickupLocation || ''}
               onChange={(e) => setDeep('shipment.pickupLocation', e.target.value)}
               className="h-9 rounded-lg text-xs mt-1"
@@ -299,6 +326,7 @@ export default function SettingsClient() {
           <div>
             <Label className="text-[11px] font-bold">Channel ID</Label>
             <Input
+              aria-label="Shiprocket channel ID"
               value={form.shipment?.channelId || ''}
               onChange={(e) => setDeep('shipment.channelId', e.target.value)}
               className="h-9 rounded-lg text-xs mt-1"
@@ -307,6 +335,7 @@ export default function SettingsClient() {
           <div>
             <Label className="text-[11px] font-bold">Free shipping threshold ₹</Label>
             <Input
+              aria-label="Free shipping threshold"
               type="number"
               value={form.shipping?.freeShippingThreshold ?? 0}
               onChange={(e) => setDeep('shipping.freeShippingThreshold', Number(e.target.value))}
@@ -314,17 +343,30 @@ export default function SettingsClient() {
             />
           </div>
           <div>
-            <Label className="text-[11px] font-bold">Flat shipping ₹</Label>
-            <Input
-              type="number"
-              value={form.shipping?.flatShippingCost ?? 0}
-              onChange={(e) => setDeep('shipping.flatShippingCost', Number(e.target.value))}
-              className="h-9 rounded-lg text-xs mt-1 font-mono"
-            />
+            <Label className="text-[11px] font-bold">Shipping below threshold ₹</Label>
+            <Select
+              value={String(form.shipping?.flatShippingCost ?? 50)}
+              onValueChange={(v) => setDeep('shipping.flatShippingCost', Number(v))}
+            >
+              <SelectTrigger aria-label="Shipping charge below threshold" className="h-9 rounded-lg text-xs mt-1 font-mono">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[50, 55, 60].map((amt) => (
+                  <SelectItem key={amt} value={String(amt)}>
+                    ₹{amt}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-[9px] text-muted-foreground mt-1 leading-tight">
+              Applied when the order is below the free-shipping threshold.
+            </p>
           </div>
           <div>
             <Label className="text-[11px] font-bold">Default weight (g)</Label>
             <Input
+              aria-label="Default package weight in grams"
               type="number"
               value={form.shipping?.defaultWeightG ?? 0}
               onChange={(e) => setDeep('shipping.defaultWeightG', Number(e.target.value))}
@@ -334,6 +376,7 @@ export default function SettingsClient() {
           <div>
             <Label className="text-[11px] font-bold">Pickup pincode (6-digit)</Label>
             <Input
+              aria-label="Shiprocket pickup pincode"
               value={form.shipping?.pickupPincode || ''}
               maxLength={6}
               onChange={(e) => setDeep('shipping.pickupPincode', e.target.value.replace(/\D/g, '').slice(0, 6))}
@@ -344,6 +387,7 @@ export default function SettingsClient() {
             <div>
               <Label className="text-[10px] font-bold">Length (cm)</Label>
               <Input
+                aria-label="Default package length in centimetres"
                 type="number"
                 value={form.shipping?.defaultLengthCm ?? 0}
                 onChange={(e) => setDeep('shipping.defaultLengthCm', Number(e.target.value))}
@@ -353,6 +397,7 @@ export default function SettingsClient() {
             <div>
               <Label className="text-[10px] font-bold">Width (cm)</Label>
               <Input
+                aria-label="Default package width in centimetres"
                 type="number"
                 value={form.shipping?.defaultWidthCm ?? 0}
                 onChange={(e) => setDeep('shipping.defaultWidthCm', Number(e.target.value))}
@@ -362,6 +407,7 @@ export default function SettingsClient() {
             <div>
               <Label className="text-[10px] font-bold">Height (cm)</Label>
               <Input
+                aria-label="Default package height in centimetres"
                 type="number"
                 value={form.shipping?.defaultHeightCm ?? 0}
                 onChange={(e) => setDeep('shipping.defaultHeightCm', Number(e.target.value))}
@@ -392,6 +438,7 @@ export default function SettingsClient() {
               <div className="flex items-center justify-between mb-1">
                 <Label className="text-[10px] font-bold">{f.label}</Label>
                 <Switch
+                  aria-label={f.label}
                   className="h-4 w-6"
                   checked={f.path.split('.').reduce((o, k) => (o as any)?.[k], form) !== false}
                   onCheckedChange={(c) => setDeep(f.path, c)}
@@ -428,6 +475,7 @@ export default function SettingsClient() {
           <div className="rounded-xl border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/10 p-2.5">
             <Label className="text-[10px] font-bold">Auto-refund on cancel</Label>
             <Switch
+              aria-label="Auto-refund on cancel"
               className="h-4 w-6 mt-1"
               checked={form.refunds?.autoRefundOnCancel !== false}
               onCheckedChange={(c) => setDeep('refunds.autoRefundOnCancel', c)}
@@ -436,6 +484,7 @@ export default function SettingsClient() {
           <div className="rounded-xl border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/10 p-2.5">
             <Label className="text-[10px] font-bold">COD advance refundable</Label>
             <Switch
+              aria-label="COD advance refundable"
               className="h-4 w-6 mt-1"
               checked={form.refunds?.codAdvanceRefundable !== false}
               onCheckedChange={(c) => setDeep('refunds.codAdvanceRefundable', c)}
@@ -445,6 +494,7 @@ export default function SettingsClient() {
             <Label className="text-[10px] font-bold">Customer cancel window (hours)</Label>
             <div className="flex gap-1 mt-1">
               <Input
+                aria-label="Customer cancel window in hours"
                 type="number"
                 min={1}
                 max={720}
@@ -470,6 +520,7 @@ export default function SettingsClient() {
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 p-2.5">
             <Label className="text-[11px] font-bold">Enabled</Label>
             <Switch
+              aria-label="WhatsApp automation enabled"
               className="h-5 w-8 mt-1.5"
               checked={form.whatsapp?.enabled !== false}
               onCheckedChange={(c) => setDeep('whatsapp.enabled', c)}
@@ -478,6 +529,7 @@ export default function SettingsClient() {
           <div>
             <Label className="text-[11px] font-bold">Provider</Label>
             <Input
+              aria-label="WhatsApp provider"
               value={form.whatsapp?.provider || ''}
               onChange={(e) => setDeep('whatsapp.provider', e.target.value)}
               placeholder="interakt / wati / gupshup / custom"
@@ -487,6 +539,7 @@ export default function SettingsClient() {
           <div className="sm:col-span-2">
             <Label className="text-[11px] font-bold">Support number (+91...)</Label>
             <Input
+              aria-label="WhatsApp support number"
               value={form.whatsapp?.supportNumber || ''}
               onChange={(e) => setDeep('whatsapp.supportNumber', e.target.value)}
               placeholder="9876543210"
@@ -494,27 +547,36 @@ export default function SettingsClient() {
             />
           </div>
           <div className="sm:col-span-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={async () => {
-                const to = (document.getElementById('waTestTo') as HTMLInputElement)?.value;
-                if (!to) { toast({ title: 'Enter test number', variant: 'destructive' }); return; }
-                try {
-                  const api = (await import('@/lib/api/client')).default;
-                  const res = await api.post('/settings/admin/whatsapp-test', { to });
-                  toast({
-                    title: res.data.data?.sent ? 'WhatsApp sent!' : 'Logged as mock',
-                    description: res.data.data?.mock ? 'No WHATSAPP_API_KEY set — check server console.' : `Provider: ${res.data.data?.provider}`,
-                  });
-                } catch (e: any) {
-                  toast({ title: 'Test failed', description: e.response?.data?.error || e.message, variant: 'destructive' });
-                }
-              }}
-              className="h-9 rounded-xl text-[11px] font-extrabold shadow-sm"
-            >
-              <BellRing className="h-3.5 w-3.5 mr-1.5" /> Send Test
-            </Button>
+            <Label htmlFor="waTestTo" className="text-[11px] font-bold">Test number</Label>
+            <div className="flex gap-2 mt-1">
+              <Input
+                id="waTestTo"
+                aria-label="WhatsApp test number"
+                placeholder="9876543210"
+                className="h-9 rounded-lg text-xs font-mono"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  const to = (document.getElementById('waTestTo') as HTMLInputElement)?.value;
+                  if (!to) { toast({ title: 'Enter test number', variant: 'destructive' }); return; }
+                  try {
+                    const api = (await import('@/lib/api/client')).default;
+                    const res = await api.post('/settings/admin/whatsapp-test', { to });
+                    toast({
+                      title: res.data.data?.sent ? 'WhatsApp sent!' : 'Logged as mock',
+                      description: res.data.data?.mock ? 'No WHATSAPP_API_KEY set — check server console.' : `Provider: ${res.data.data?.provider}`,
+                    });
+                  } catch (e: any) {
+                    toast({ title: 'Test failed', description: e.response?.data?.error || e.message, variant: 'destructive' });
+                  }
+                }}
+                className="h-9 rounded-xl text-[11px] font-extrabold shadow-sm shrink-0"
+              >
+                <BellRing className="h-3.5 w-3.5 mr-1.5" /> Send Test
+              </Button>
+            </div>
             <p className="text-[9px] text-muted-foreground mt-1">Sends via WhatsApp provider configured in server .env.</p>
           </div>
         </CardContent>
@@ -529,22 +591,103 @@ export default function SettingsClient() {
         </div>
         <CardContent className="p-3.5 space-y-4">
           <div>
-            <Label className="text-[11px] font-bold">Announcement bar</Label>
-            <Input
-              value={form.storefront?.announcement || ''}
-              onChange={(e) => setDeep('storefront.announcement', e.target.value)}
-              placeholder="Flash sale banner text…"
-              className="h-9 rounded-lg text-xs mt-1"
-            />
+            <div className="flex items-center justify-between gap-2">
+              <Label className="text-[11px] font-bold flex items-center gap-1.5">
+                <BellRing className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                Announcement marquee messages ({(form.storefront?.announcements || []).length})
+              </Label>
+              <Badge
+                variant="outline"
+                className={`text-[8px] font-extrabold rounded-full px-1.5 ${
+                  (form.storefront?.announcements || []).length >= 10
+                    ? 'border-emerald-500/40 text-emerald-600'
+                    : 'border-amber-500/40 text-amber-600'
+                }`}
+              >
+                {(form.storefront?.announcements || []).length >= 10 ? '10+ READY' : 'MIN 10'}
+              </Badge>
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug">
+              Scrolls continuously across the top of every storefront page. Add 10 or more for a
+              seamless loop — any missing slots are filled with the default offers.
+            </p>
+            <div className="space-y-1.5 mt-2">
+              {(form.storefront?.announcements || []).map((msg: string, i: number) => (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="w-5 shrink-0 text-right text-[10px] font-extrabold text-muted-foreground">
+                    {i + 1}
+                  </span>
+                  <Input
+                    aria-label={`Announcement message ${i + 1}`}
+                    value={msg}
+                    onChange={(e) => {
+                      const next = [...(form.storefront?.announcements || [])];
+                      next[i] = e.target.value;
+                      setDeep('storefront.announcements', next);
+                    }}
+                    placeholder="🎉 FLAT 20% OFF THIS WEEKEND | CODE: FESTIVE20"
+                    maxLength={300}
+                    className="h-8 rounded-lg text-[11px] flex-1"
+                  />
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    aria-label={`Remove announcement message ${i + 1}`}
+                    onClick={() =>
+                      setDeep(
+                        'storefront.announcements',
+                        (form.storefront?.announcements || []).filter((_: any, j: number) => j !== i)
+                      )
+                    }
+                  >
+                    <Trash2 className="h-3.5 w-3.5 text-rose-500" />
+                  </Button>
+                </div>
+              ))}
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    setDeep('storefront.announcements', [...(form.storefront?.announcements || []), ''])
+                  }
+                  className="h-8 rounded-lg text-[11px] font-extrabold shadow-sm"
+                >
+                  <Plus className="h-3.5 w-3.5 mr-1.5" /> Add Message
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() =>
+                    setDeep('storefront.announcements', [
+                      '🔥 FLAT 15% OFF ON YOUR FIRST ORDER | USE CODE: MENTOOS15',
+                      '🚚 FREE EXPRESS SHIPPING ON ALL ORDERS OVER ₹999',
+                      '💵 CASH ON DELIVERY AVAILABLE | EASY 7-DAY EXCHANGES',
+                      '⚡ NEW ARRIVALS 2026 NOW LIVE — SHOP OVERSIZED TEES & KURTAS',
+                      '🎉 FESTIVE DROP: FLAT 20% OFF ETHNIC WEAR | CODE: FESTIVE20',
+                      '🛍️ BUY ANY 2 PRODUCTS & SAVE 10% EXTRA | CODE: BUY2GET10',
+                      '🏷️ FLAT ₹200 OFF ON ORDERS ABOVE ₹1,499 | CODE: FLAT200',
+                      '⭐ 4.8/5 RATED BY 10,000+ HAPPY CUSTOMERS',
+                      '🔁 EASY 7-DAY RETURNS & EXCHANGES — NO QUESTIONS ASKED',
+                      '📦 SAME-DAY DISPATCH ON ALL ORDERS PLACED BEFORE 2 PM',
+                    ])
+                  }
+                  className="h-8 rounded-lg text-[11px] font-extrabold text-amber-700 dark:text-amber-300"
+                >
+                  Restore 10 defaults
+                </Button>
+              </div>
+            </div>
           </div>
           <div>
             <Label className="text-[11px] font-bold">Banners ({(form.storefront?.banners || []).length})</Label>
             <div className="space-y-1.5 mt-1">
               {(form.storefront?.banners || []).map((b: any, i: number) => (
                 <div key={i} className="flex gap-2 items-end">
-                  <Input value={b.title} onChange={(e) => { const next = [...form.storefront.banners]; next[i] = { ...next[i], title: e.target.value }; setDeep('storefront.banners', next); }} placeholder="Title" className="h-8 rounded-lg text-[11px]" />
-                  <Input value={b.image} onChange={(e) => { const next = [...form.storefront.banners]; next[i] = { ...next[i], image: e.target.value }; setDeep('storefront.banners', next); }} placeholder="Image URL" className="h-8 rounded-lg text-[11px] flex-1" />
-                  <Input value={b.link} onChange={(e) => { const next = [...form.storefront.banners]; next[i] = { ...next[i], link: e.target.value }; setDeep('storefront.banners', next); }} placeholder="Link" className="h-8 rounded-lg text-[11px]" />
+                  <Input aria-label={`Banner ${i + 1} title`} value={b.title} onChange={(e) => { const next = [...form.storefront.banners]; next[i] = { ...next[i], title: e.target.value }; setDeep('storefront.banners', next); }} placeholder="Title" className="h-8 rounded-lg text-[11px]" />
+                  <Input aria-label={`Banner ${i + 1} image URL`} value={b.image} onChange={(e) => { const next = [...form.storefront.banners]; next[i] = { ...next[i], image: e.target.value }; setDeep('storefront.banners', next); }} placeholder="Image URL" className="h-8 rounded-lg text-[11px] flex-1" />
+                  <Input aria-label={`Banner ${i + 1} link`} value={b.link} onChange={(e) => { const next = [...form.storefront.banners]; next[i] = { ...next[i], link: e.target.value }; setDeep('storefront.banners', next); }} placeholder="Link" className="h-8 rounded-lg text-[11px]" />
                   <Button
                     type="button"
                     size="sm"
@@ -558,6 +701,7 @@ export default function SettingsClient() {
                     type="button"
                     size="icon"
                     variant="ghost"
+                    aria-label={`Remove banner ${i + 1}`}
                     onClick={() => setDeep('storefront.banners', form.storefront.banners.filter((_: any, j: number) => j !== i))}
                   >
                     <Trash2 className="h-3.5 w-3.5 text-rose-500" />

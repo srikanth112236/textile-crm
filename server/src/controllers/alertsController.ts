@@ -65,7 +65,7 @@ export const listBackInStock = async (req: Request, res: Response): Promise<void
     const notified = req.query.notified as string | undefined;
     const filter: any = {};
     if (notified === 'true' || notified === 'false') filter.notified = notified === 'true';
-    const rows = await BackInStock.find(filter).sort({ createdAt: -1 }).limit(200).populate('productId', 'name price stock').lean();
+    const rows = await BackInStock.find(filter).sort({ createdAt: -1 }).limit(200).populate('productId', 'name price compareAtPrice stock lowStockThreshold images sku status').lean();
     const pending = await BackInStock.countDocuments({ notified: false });
     res.status(200).json({ success: true, data: { subscriptions: rows, pending } });
   } catch (err) {
@@ -152,7 +152,7 @@ export const myPriceAlerts = async (req: Request, res: Response): Promise<void> 
 // GET /api/price-alerts/admin — Admin queue
 export const listPriceAlerts = async (_req: Request, res: Response): Promise<void> => {
   try {
-    const rows = await PriceAlert.find({}).sort({ createdAt: -1 }).limit(200).populate('productId', 'name price').lean();
+    const rows = await PriceAlert.find({}).sort({ createdAt: -1 }).limit(200).populate('productId', 'name price compareAtPrice stock lowStockThreshold images sku status').lean();
     const active = await PriceAlert.countDocuments({ active: true });
     res.status(200).json({ success: true, data: { alerts: rows, active } });
   } catch (err) {

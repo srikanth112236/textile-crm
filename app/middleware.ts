@@ -7,10 +7,10 @@ export default withAuth(
     const token = req.nextauth?.token;
     const path = req.nextUrl.pathname;
 
-    // Public routes that don't require authentication
-    // Browsing + pincode check + guest order tracking are public.
-    // Cart / checkout / wishlist / orders / any shopping action requires login.
-    const publicRoutes = [
+    // Public routes that don't require authentication.
+    // Browsing, guest cart/checkout and guest order tracking are public.
+    // `/checkout/express` is intentionally NOT public — it is customer-only.
+    const exactPublicRoutes = new Set([
       '/',
       '/login',
       '/register',
@@ -19,12 +19,25 @@ export default withAuth(
       '/search',
       '/categories',
       '/track-order',
-    ];
+      '/cart',
+      '/checkout',
+      // Informational / legal pages linked from the footer.
+      '/about',
+      '/contact',
+      '/shipping',
+      '/returns',
+      '/faq',
+      '/support',
+      '/privacy',
+      '/terms',
+      '/cookies',
+    ]);
+    const prefixPublicRoutes = ['/products', '/search', '/categories'];
 
-    // Check if the path is a public route or starts with a public route prefix
-    const isPublicRoute = publicRoutes.some(route => 
-      path === route || path.startsWith(`${route}/`)
-    );
+    const isExpressCheckout = path === '/checkout/express' || path.startsWith('/checkout/express/');
+    const isPublicRoute =
+      !isExpressCheckout &&
+      (exactPublicRoutes.has(path) || prefixPublicRoutes.some((route) => path.startsWith(`${route}/`)));
 
     // Allow access to public routes without token
     if (isPublicRoute) {
@@ -68,38 +81,10 @@ export default withAuth(
   },
   {
       callbacks: {
-      // Only require auth for protected routes (not public routes)
-      authorized: ({ token, req }) => {
-        const path = req.nextUrl.pathname;
-        
-        // Public routes that don't require authentication
-        const publicRoutes = [
-          '/',
-          '/login',
-          '/register',
-          '/register-admin',
-          '/products',
-          '/search',
-          '/categories',
-          '/track-order',
-        ];
-
-        // Check if the path is a public route or starts with a public route prefix
-        const isPublicRoute = publicRoutes.some(route => 
-          path === route || path.startsWith(`${route}/`)
-        );
-
-        // Allow access to public routes without token
-        if (isPublicRoute) {
-          return true; // Allow access
-        }
-        
-        // The middleware body above already decides access (and redirects
-        // protected pages to `/?authRequired=1`). Returning true here avoids
-        // next-auth's default behavior of bouncing unauthorized requests to
-        // pages.signIn — https://next-auth.js.org/tutorials/securing-pages-and-api-routes
-        return true;
-      },
+      // The middleware body above already decides access (and redirects
+      // protected pages to `/?authRequired=1`). Always return true here so
+      // next-auth never bounces users to its default signIn page.
+      authorized: () => true,
     },
   }
 );
@@ -114,6 +99,6 @@ export const config = {
      * - favicon.ico (favicon file)
      * - public files (public folder)
      */
-    '/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!api|_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml|json|webmanifest|woff|woff2)$).*)',
   ],
 };

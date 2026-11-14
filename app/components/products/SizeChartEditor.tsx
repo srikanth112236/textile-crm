@@ -38,11 +38,11 @@ export function SizeChartEditor({
       <div className="grid grid-cols-2 gap-3">
         <div>
           <Label className="text-xs">Model height (e.g. 6'0")</Label>
-          <Input value={modelHeight} onChange={(e) => onModelHeightChange(e.target.value)} placeholder="6'0&quot;" maxLength={20} className="h-8 text-xs mt-1" />
+          <Input aria-label="Model height" value={modelHeight} onChange={(e) => onModelHeightChange(e.target.value)} placeholder="6'0&quot;" maxLength={20} className="h-8 text-xs mt-1" />
         </div>
         <div>
           <Label className="text-xs">Size worn by model (e.g. L)</Label>
-          <Input value={modelSizeWorn} onChange={(e) => onModelSizeWornChange(e.target.value)} placeholder="L" maxLength={10} className="h-8 text-xs mt-1" />
+          <Input aria-label="Size worn by model" value={modelSizeWorn} onChange={(e) => onModelSizeWornChange(e.target.value)} placeholder="L" maxLength={10} className="h-8 text-xs mt-1" />
         </div>
       </div>
 
@@ -75,11 +75,11 @@ export function SizeChartEditor({
                 {rows.map((r, i) => (
                   <tr key={i} className="border-t">
                     <td className="px-1.5 py-1">
-                      <Input value={r.size} onChange={(e) => setCell(i, 'size', e.target.value)} placeholder="M" maxLength={10} className="h-7 text-xs font-bold w-16" />
+                      <Input aria-label={`Size row ${i + 1}`} value={r.size} onChange={(e) => setCell(i, 'size', e.target.value)} placeholder="M" maxLength={10} className="h-7 text-xs font-bold w-16" />
                     </td>
                     {MEASURE_COLUMNS.map((c) => (
                       <td key={c.key} className="px-1.5 py-1">
-                        <Input value={(r as any)[c.key] || ''} onChange={(e) => setCell(i, c.key, e.target.value)} placeholder="–" maxLength={20} className="h-7 text-xs w-16" inputMode="decimal" />
+                        <Input aria-label={`${c.label} for size row ${i + 1}`} value={(r as any)[c.key] || ''} onChange={(e) => setCell(i, c.key, e.target.value)} placeholder="–" maxLength={20} className="h-7 text-xs w-16" inputMode="decimal" />
                       </td>
                     ))}
                     <td className="px-1.5 py-1">

@@ -11,6 +11,11 @@ import { Loader2 } from 'lucide-react';
 
 const STATUSES = ['requested', 'approved', 'rejected', 'pickup_scheduled', 'received', 'refunded', 'exchanged', 'cancelled'];
 
+const statusLabel = (status: string) =>
+  status
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+
 export default function AdminReturnsClient() {
   const { toast } = useToast();
   const [rows, setRows] = useState<any[]>([]);
@@ -38,7 +43,7 @@ export default function AdminReturnsClient() {
   const update = async (id: string, status: string) => {
     try {
       await returnsApi.adminUpdate(id, { status, adminNote: notes[id] || undefined });
-      toast({ title: `Marked ${status.replace('_', ' ')} — customer notified on WhatsApp` });
+      toast({ title: `Marked ${statusLabel(status)} — customer notified on WhatsApp` });
       load();
     } catch (e: any) {
       toast({ title: 'Update failed', description: e.response?.data?.error || e.message, variant: 'destructive' });
@@ -46,6 +51,10 @@ export default function AdminReturnsClient() {
   };
 
   const filtered = filter ? rows.filter((r) => r.status === filter) : rows;
+  const statusCounts = rows.reduce<Record<string, number>>((acc, r) => {
+    acc[r.status] = (acc[r.status] || 0) + 1;
+    return acc;
+  }, {});
 
   if (loading) return <div className="p-8 flex items-center gap-2 text-sm"><Loader2 className="h-4 w-4 animate-spin" /> Loading RMA queue…</div>;
 
@@ -57,9 +66,11 @@ export default function AdminReturnsClient() {
           <p className="text-sm text-muted-foreground">{rows.length} requests · status changes notify the customer on WhatsApp</p>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <Button size="sm" variant={filter === '' ? 'default' : 'outline'} onClick={() => setFilter('')}>All</Button>
+          <Button size="sm" variant={filter === '' ? 'default' : 'outline'} onClick={() => setFilter('')}>All ({rows.length})</Button>
           {STATUSES.map((s) => (
-            <Button key={s} size="sm" variant={filter === s ? 'default' : 'outline'} onClick={() => setFilter(s)}>{s.replace('_', ' ')}</Button>
+            <Button key={s} size="sm" variant={filter === s ? 'default' : 'outline'} onClick={() => setFilter(s)}>
+              {statusLabel(s)} ({statusCounts[s] || 0})
+            </Button>
           ))}
         </div>
       </div>
@@ -87,7 +98,7 @@ export default function AdminReturnsClient() {
             <CardTitle className="text-base flex items-center gap-2 flex-wrap">
               <Badge variant="outline" className="uppercase">{r.type}</Badge>
               {r.orderNumber}
-              <Badge>{r.status.replace('_', ' ')}</Badge>
+              <Badge>{statusLabel(r.status)}</Badge>
             </CardTitle>
             <CardDescription>{new Date(r.createdAt).toLocaleString('en-IN')} · {r.items.length} item(s)</CardDescription>
           </CardHeader>
@@ -101,7 +112,7 @@ export default function AdminReturnsClient() {
             <div className="flex gap-2 items-center flex-wrap">
               <Input placeholder="Admin note (sent to customer)" value={notes[r._id] || ''} onChange={(e) => setNotes({ ...notes, [r._id]: e.target.value })} className="flex-1 min-w-[200px] text-xs" />
               <select value={r.status} onChange={(e) => update(r._id, e.target.value)} className="text-xs border rounded-lg px-2 py-2">
-                {STATUSES.map((s) => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
+                {STATUSES.map((s) => <option key={s} value={s}>{statusLabel(s)}</option>)}
               </select>
             </div>
           </CardContent>

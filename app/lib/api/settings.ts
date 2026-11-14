@@ -26,7 +26,7 @@ export interface PublicSettings {
   shipment: { provider: string; shiprocketEnabled: boolean };
   refunds?: { allowCustomerCancelHours: number | null; codAdvanceRefundable: boolean };
   whatsapp: { enabled: boolean; supportNumber: string };
-  storefront: { banners: Array<{ image: string; title: string; subtitle?: string; link: string; isActive: boolean }>; announcement: string };
+  storefront: { banners: Array<{ image: string; title: string; subtitle?: string; link: string; isActive: boolean }>; announcement: string; announcements?: string[] };
 }
 
 export interface CODQuote {

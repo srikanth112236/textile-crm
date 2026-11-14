@@ -97,8 +97,10 @@ export function SocketProvider({ children }: { children: ReactNode }) {
           transports: ['websocket', 'polling'],
           reconnection: true,
           reconnectionDelay: 2000,
-          reconnectionDelayMax: 10000,
-          reconnectionAttempts: 10,
+          reconnectionDelayMax: 15000,
+          // Keep retrying: the dev backend restarts on every file save, and a
+          // capped retry count used to leave notifications dead until reload.
+          reconnectionAttempts: Infinity,
         });
         sock.on('connect', () => setIsConnected(true));
         sock.on('disconnect', () => setIsConnected(false));

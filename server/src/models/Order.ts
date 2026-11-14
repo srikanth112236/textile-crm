@@ -97,6 +97,15 @@ export interface IOrder extends Document {
   discountAmount?: number;
   discountCode?: string; // coupon applied, e.g. MENTOOS15
   shippingCost?: number;
+  /** Courier chosen by the live rate quote (Shiprocket). */
+  shippingCourier?: string;
+  /** Courier ETA string, e.g. "2 days" or "Oct 29, 2026". */
+  shippingEtd?: string;
+  /** Where the shipping price came from — useful for audits. */
+  shippingRateSource?: 'shiprocket' | 'flat' | 'free';
+  /** Real courier cost, stored even when the customer got free shipping. */
+  shippingActualCost?: number;
+  shippingQuotedAt?: Date;
   shippingAddress: IShippingAddress;
   status: OrderStatus;
   paymentStatus: PaymentStatus;
@@ -113,6 +122,7 @@ export interface IOrder extends Document {
   refundStatus?: 'none' | 'pending' | 'processing' | 'completed';
   refundCompletedAt?: Date;
   refundReference?: string; // gateway refund id / manual transaction ref
+  refundStockRestored?: boolean; // guard against double stock return on refunds
   cancelledBy?: mongoose.Types.ObjectId; // User ID who cancelled (if cancelled by user)
   cancelledReason?: string; // Reason for cancellation
   
@@ -370,6 +380,25 @@ const OrderSchema = new Schema<IOrder>(
       min: [0, 'Shipping cost cannot be negative'],
       default: 0,
     },
+    shippingCourier: {
+      type: String,
+      trim: true,
+    },
+    shippingEtd: {
+      type: String,
+      trim: true,
+    },
+    shippingRateSource: {
+      type: String,
+      enum: ['shiprocket', 'flat', 'free'],
+    },
+    shippingActualCost: {
+      type: Number,
+      min: 0,
+    },
+    shippingQuotedAt: {
+      type: Date,
+    },
     shippingAddress: {
       type: ShippingAddressSchema,
       required: [true, 'Shipping address is required'],
@@ -419,6 +448,7 @@ const OrderSchema = new Schema<IOrder>(
     },
     refundCompletedAt: { type: Date },
     refundReference: { type: String, trim: true, maxlength: [100, 'Reference too long'] },
+    refundStockRestored: { type: Boolean, default: false },
     refundNotes: {
       type: String,
       trim: true,

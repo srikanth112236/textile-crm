@@ -96,9 +96,9 @@ export default function RegisterAdminPage() {
         <div className="flex items-center justify-center mb-4">
           <Shield className="h-8 w-8 text-primary" />
         </div>
-        <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900 dark:text-gray-100">
+        <h1 className="mt-6 text-center text-3xl font-extrabold text-gray-900 dark:text-gray-100">
           Admin Registration
-        </h2>
+        </h1>
         <p className="mt-2 text-center text-sm text-gray-600 dark:text-gray-400">
           Register as Admin or Superadmin
         </p>

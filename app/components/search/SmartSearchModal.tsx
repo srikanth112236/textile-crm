@@ -20,7 +20,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { productsApi } from '@/lib/api/products';
-import { categoriesApi } from '@/lib/api/categories';
+import { categoriesApi, flattenCategories } from '@/lib/api/categories';
 import type { ICategory } from '@/lib/api/types';
 
 interface SmartSearchModalProps {
@@ -159,7 +159,8 @@ export function SmartSearchModal({ isOpen, onClose }: SmartSearchModalProps) {
       try {
         const res = await categoriesApi.getCategories('active');
         if (res.data) {
-          setAllCategories(res.data);
+          // Endpoint returns a nested tree; search works over a flat list.
+          setAllCategories(flattenCategories(res.data));
         }
       } catch (err: any) {
         // 404 means backend route missing or server not ready — degrade gracefully

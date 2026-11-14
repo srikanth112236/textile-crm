@@ -90,11 +90,18 @@ const config: Config = {
           '0%': { opacity: '0', transform: 'translateY(18px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
         },
+        // Infinite marquee for the announcement bar (track is duplicated 2x,
+        // so -50% lands exactly on the start of the second copy).
+        marquee: {
+          '0%': { transform: 'translate3d(0, 0, 0)' },
+          '100%': { transform: 'translate3d(-50%, 0, 0)' },
+        },
       },
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
         'hero-rise': 'hero-rise 600ms cubic-bezier(0.22, 1, 0.36, 1) forwards',
+        marquee: 'marquee 38s linear infinite',
       },
       fontSize: {
         base: ['1rem', { lineHeight: '1.2', letterSpacing: '-0.01em' }],

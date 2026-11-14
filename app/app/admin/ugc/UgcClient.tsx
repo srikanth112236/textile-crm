@@ -117,7 +117,7 @@ export default function UgcClient() {
               <div className="text-muted-foreground truncate">Product: {typeof item.productId === 'object' ? (item.productId as any).name : item.productId || 'not tagged'}</div>
               <div className="flex gap-2">
                 <Button size="sm" variant="outline" onClick={() => toggleFeatured(item)}><Star className="h-3 w-3 mr-1" />{item.featured ? 'Unfeature' : 'Feature'}</Button>
-                <Button size="sm" variant="ghost" onClick={() => handleDelete(item._id)} className="text-destructive"><Trash2 className="h-3 w-3" /></Button>
+                <Button size="sm" variant="ghost" aria-label="Delete UGC item" onClick={() => handleDelete(item._id)} className="text-destructive"><Trash2 className="h-3 w-3" /></Button>
               </div>
             </CardContent>
           </Card>

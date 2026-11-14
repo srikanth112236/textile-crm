@@ -7,6 +7,7 @@ import {
   checkServiceability,
   createShiprocketOrder,
   trackByAWB,
+  trackByShipmentId,
   cancelShiprocketOrder,
   assignCourierAWB,
   generatePickup,
@@ -16,6 +17,7 @@ import {
   isShiprocketConfigured,
 } from '../services/shiprocket';
 import { emitToUser } from '../config/socket';
+import { getShippingQuote, toPackageLine } from '../services/shippingPricing';
 
 // GET /api/shipment/serviceability?delivery=515122&weightG=500&cod=true
 export const getServiceability = async (req: Request, res: Response): Promise<void> => {
@@ -49,6 +51,67 @@ export const getServiceability = async (req: Request, res: Response): Promise<vo
   } catch (err: any) {
     console.error('Serviceability error:', err.response?.data || err.message);
     res.status(502).json({ error: 'Courier serviceability check failed' });
+  }
+};
+
+// POST /api/shipment/quote — live shipping price for the checkout summary.
+// Public so guest checkout works; rate-limited. The amount is only used for
+// display: order creation recomputes it server-side from the real cart.
+export const getShippingQuoteHandler = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const schema = Joi.object({
+      pincode: Joi.string().trim().regex(/^\d{6}$/).required(),
+      paymentMethod: Joi.string()
+        .valid('manual', 'razorpay', 'cod', 'upi', 'card', 'netbanking', 'wallet')
+        .default('razorpay'),
+      orderValue: Joi.number().min(0).max(10000000).default(0),
+      items: Joi.array()
+        .items(
+          Joi.object({
+            productId: Joi.string().regex(/^[0-9a-fA-F]{24}$/).required(),
+            quantity: Joi.number().integer().min(1).max(50).required(),
+          })
+        )
+        .min(1)
+        .max(50)
+        .required(),
+    });
+
+    const { error, value } = schema.validate(req.body);
+    if (error) {
+      res.status(400).json({ error: 'Validation error', details: error.details.map((d) => d.message) });
+      return;
+    }
+
+    const { Product } = await import('../models/Product');
+    const ids = Array.from(new Set((value.items as any[]).map((i) => i.productId)));
+    const products = await Product.find({ _id: { $in: ids } })
+      .select('shipping')
+      .lean();
+    const byId = new Map(products.map((p: any) => [String(p._id), p]));
+
+    const lines = (value.items as any[])
+      .filter((i) => byId.has(i.productId))
+      .map((i) => toPackageLine(byId.get(i.productId), i.quantity));
+
+    if (lines.length === 0) {
+      res.status(400).json({ error: 'No valid cart items found for this quote' });
+      return;
+    }
+
+    const settings = await Settings.findOne({ key: 'global' });
+    const quote = await getShippingQuote({
+      lines,
+      deliveryPincode: value.pincode as string,
+      paymentMethod: value.paymentMethod as string,
+      orderValue: Number(value.orderValue) || 0,
+      settings: settings as any,
+    });
+
+    res.status(200).json({ success: true, data: quote });
+  } catch (err: any) {
+    console.error('Shipping quote error:', err?.response?.data || err?.message);
+    res.status(502).json({ error: 'Could not calculate shipping right now' });
   }
 };
 
@@ -160,6 +223,113 @@ export const trackShipment = async (req: Request, res: Response): Promise<void> 
   } catch (err: any) {
     console.error('Track error:', err.response?.data || err.message);
     res.status(502).json({ error: 'Tracking failed' });
+  }
+};
+
+/**
+ * POST /api/shipment/orders/:id/sync-tracking
+ * Pull the latest Shiprocket status for one order and apply it using the same
+ * rules as the webhook. This is the safety net for missed webhooks: a delivered
+ * shipment always ends up with a delivered order.
+ */
+export const syncOrderTracking = async (req: Request, res: Response): Promise<void> => {
+  try {
+    if (!isShiprocketConfigured()) {
+      res.status(503).json({ error: 'Shiprocket not configured' });
+      return;
+    }
+    const order = await Order.findById(req.params.id);
+    if (!order) {
+      res.status(404).json({ error: 'Order not found' });
+      return;
+    }
+    const o: any = order;
+    if (!o.shiprocketAWB && !o.shiprocketShipmentId) {
+      res.status(400).json({ error: 'Order has not been pushed to Shiprocket yet' });
+      return;
+    }
+
+    let track: any = null;
+    if (o.shiprocketAWB) {
+      try {
+        track = await trackByAWB(o.shiprocketAWB);
+      } catch {
+        track = null;
+      }
+    }
+    if (!track && o.shiprocketShipmentId) {
+      track = await trackByShipmentId(o.shiprocketShipmentId);
+    }
+    if (!track) {
+      res.status(502).json({ error: 'Shiprocket tracking lookup failed' });
+      return;
+    }
+
+    const { extractCourierStatus, mapCourierStatusToOrder } = await import('../jobs/shipmentSync');
+    const { status, awb, courier, etd } = extractCourierStatus(track);
+    const trackingData = track?.tracking_data || track || {};
+    const prevStatus = o.shiprocketStatus || '';
+    const prevAWB = o.shiprocketAWB || '';
+    const prevCourier = o.shiprocketCourier || '';
+
+    if (awb && !o.shiprocketAWB) {
+      o.shiprocketAWB = String(awb);
+      o.trackingNumber = String(awb);
+    }
+    if (courier) o.shiprocketCourier = String(courier);
+    if (status) o.shiprocketStatus = String(status);
+    if (trackingData.track_url) o.trackingUrl = String(trackingData.track_url);
+    if (etd) {
+      const d = new Date(etd);
+      if (!Number.isNaN(d.getTime())) o.estimatedDelivery = d;
+    }
+
+    const next = status ? mapCourierStatusToOrder(status, order.status) : null;
+    const changed =
+      (status && status !== prevStatus) ||
+      (o.shiprocketAWB && o.shiprocketAWB !== prevAWB) ||
+      (o.shiprocketCourier && o.shiprocketCourier !== prevCourier) ||
+      Boolean(next && next !== order.status);
+
+    if (next) order.status = next;
+
+    if (changed) {
+      order.timeline.push({
+        event: 'Shipment tracking synced',
+        description: `Courier status: ${status || 'unknown'}`.slice(0, 500),
+        type: 'fulfillment',
+        metadata: { courierStatus: status, previousStatus: prevStatus, awb: o.shiprocketAWB, source: 'admin-sync' },
+        createdAt: new Date(),
+      } as any);
+      await order.save();
+      try {
+        emitToUser(order.userId.toString(), 'trackingUpdated', {
+          orderId: order._id.toString(),
+          status: order.status,
+          courierStatus: status,
+          source: 'admin-sync',
+        });
+      } catch { /* socket optional */ }
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        orderId: order._id.toString(),
+        orderStatus: order.status,
+        courierStatus: status || '',
+        awb: o.shiprocketAWB || '',
+        courier: o.shiprocketCourier || '',
+        etd: o.estimatedDelivery || null,
+        trackingUrl: o.trackingUrl || '',
+        updated: changed,
+        message: status ? undefined : 'Shiprocket has no tracking activity for this shipment yet.',
+        tracking: track,
+      },
+    });
+  } catch (err: any) {
+    console.error('Order tracking sync error:', err.response?.data || err.message);
+    res.status(502).json({ error: 'Shiprocket tracking sync failed' });
   }
 };
 

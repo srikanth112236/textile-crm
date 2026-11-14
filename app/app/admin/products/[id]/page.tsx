@@ -40,8 +40,9 @@ import {
   TabsList,
   TabsTrigger,
 } from '@/components/ui/tabs';
-import { ArrowLeft, Loader2, Eye, Tag as TagIcon, Grid3X3, Settings2, Bug, AlertCircle, ChevronDown, ChevronUp, Copy, Check, Ruler } from 'lucide-react';
+import { ArrowLeft, Loader2, Eye, Tag as TagIcon, Grid3X3, Settings2, Bug, AlertCircle, ChevronDown, ChevronUp, Copy, Check, Ruler, Video } from 'lucide-react';
 import ProductImageUpload, { ImageWithMetadata } from '@/components/products/ProductImageUpload';
+import ProductVideoManager, { ProductVideoInfo } from '@/components/products/ProductVideoManager';
 import MetadataPreview from '@/components/products/MetadataPreview';
 import ProductPreview from '@/components/products/ProductPreview';
 import ProductVariantsManager from '@/components/products/ProductVariantsManager';
@@ -162,6 +163,7 @@ export default function ProductFormPage() {
   const [volumePricing, setVolumePricing] = useState<IVolumePricing[]>([]);
   const [identifiers, setIdentifiers] = useState<IProductIdentifiers | undefined>(undefined);
   const [inventory, setInventory] = useState<IInventorySettings | undefined>(undefined);
+  const [videos, setVideos] = useState<ProductVideoInfo[]>([]);
 
   const {
     register,
@@ -289,6 +291,7 @@ export default function ProductFormPage() {
       setVolumePricing(product.volumePricing || []);
       setIdentifiers(product.identifiers);
       setInventory(product.inventory);
+      setVideos((product.videos as ProductVideoInfo[]) || []);
     } catch (error: any) {
       console.error('Failed to fetch product:', error);
       router.push('/admin/products');
@@ -440,6 +443,18 @@ export default function ProductFormPage() {
         variantAttributes: hasVariants && variantAttributes.length > 0 ? variantAttributes : undefined,
         variantSKUs: hasVariants && variantSKUs.length > 0 ? variantSKUs : undefined,
       };
+
+      // Product video (floating PDP player). Always send the array so removing
+      // the last video also clears it on the backend.
+      const cleanVideos = videos
+        .filter((v) => v && v.url && v.url.trim())
+        .map((v) => ({
+          url: v.url.trim(),
+          thumbnailUrl: v.thumbnailUrl?.trim() || undefined,
+          title: v.title?.trim() || undefined,
+          enabled: v.enabled !== false,
+        }));
+      productData.videos = cleanVideos;
 
       // Only add metadata if there's any
       if (Object.keys(normalizedMetadata).length > 0) {
@@ -711,6 +726,7 @@ export default function ProductFormPage() {
                   type="button"
                   variant="ghost"
                   size="sm"
+                  aria-label="Copy API payload"
                   onClick={(e) => { e.stopPropagation(); copyPayloadToClipboard(); }}
                   className="h-6 px-2"
                 >
@@ -800,7 +816,7 @@ export default function ProductFormPage() {
                 control={control}
                 render={({ field }) => (
                   <Select onValueChange={field.onChange} value={field.value}>
-                    <SelectTrigger className={`h-9 ${errors.category || hasFieldError('category') ? 'border-destructive ring-1 ring-destructive/50' : ''}`}>
+                    <SelectTrigger aria-label="Product category" className={`h-9 ${errors.category || hasFieldError('category') ? 'border-destructive ring-1 ring-destructive/50' : ''}`}>
                       <SelectValue placeholder="Select category" />
                     </SelectTrigger>
                     <SelectContent>
@@ -935,7 +951,7 @@ export default function ProductFormPage() {
                 control={control}
                 render={({ field }) => (
                   <Select onValueChange={field.onChange} value={field.value}>
-                    <SelectTrigger className="h-9">
+                    <SelectTrigger aria-label="Product status" className="h-9">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -1013,6 +1029,15 @@ export default function ProductFormPage() {
           {(errors.images || getFieldError('images')) && (
             <p className="text-xs text-destructive mt-2">{errors.images?.message || getFieldError('images')}</p>
           )}
+        </div>
+
+        {/* Product Video */}
+        <div className="rounded-lg border bg-card p-4">
+          <h2 className="text-base font-semibold mb-3 flex items-center gap-2">
+            <Video className="h-4 w-4 text-primary" />
+            Product Video
+          </h2>
+          <ProductVideoManager videos={videos} onChange={setVideos} />
         </div>
 
         {/* SEO Metadata */}
@@ -1123,7 +1148,7 @@ export default function ProductFormPage() {
                 control={control}
                 render={({ field }) => (
                   <Select onValueChange={field.onChange} value={field.value}>
-                    <SelectTrigger>
+                    <SelectTrigger aria-label="Twitter card type">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -1240,7 +1265,7 @@ export default function ProductFormPage() {
             onModelHeightChange={setModelHeight}
             modelSizeWorn={modelSizeWorn}
             onModelSizeWornChange={setModelSizeWorn}
-            categoryName={categories.find((c) => c._id === watch('category'))?.name}
+            categoryName={flatCategories.find((c) => c._id === watch('category'))?.name?.trim()}
           />
         </div>
 

@@ -1,4 +1,11 @@
 import { Suspense } from 'react';
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  title: 'Account | Mentoos',
+  description: 'Sign in or create your Mentoos account to track orders, save addresses and check out faster.',
+  robots: { index: false, follow: true },
+};
 
 export default function AuthLayout({
   children,

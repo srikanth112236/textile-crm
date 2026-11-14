@@ -4,6 +4,7 @@ import mongoose from 'mongoose';
 import { ReturnRequest, RmaStatus, RmaType } from '../models/ReturnRequest';
 import { Order, OrderStatus } from '../models/Order';
 import { emitToUser, emitToAdmins } from '../config/socket';
+import { RefundError, createOrderRefund } from '../services/refunds';
 
 const itemSchema = Joi.object({
   productId: Joi.string().regex(/^[0-9a-fA-F]{24}$/).required(),
@@ -114,43 +115,68 @@ export const updateReturnRequest = async (req: Request, res: Response): Promise<
       res.status(404).json({ error: 'Request not found' });
       return;
     }
-    rma.status = value.status as RmaStatus;
+    const nextStatus = value.status as RmaStatus;
     if (value.adminNote !== undefined) rma.adminNote = value.adminNote;
     if (value.refundAmount !== undefined) rma.refundAmount = value.refundAmount;
-    // Auto-invoke Razorpay refund when admin marks refunded
-    if (value.status === RmaStatus.REFUNDED && !rma.razorpayRefundId) {
+
+    // A return refund is an order refund too. Route it through the same ledger
+    // so it is capped at collected money and cannot overwrite previous partial
+    // refunds. The amount is based on the returned line items unless the admin
+    // supplies an explicit refundAmount.
+    if (nextStatus === RmaStatus.REFUNDED && !rma.razorpayRefundId) {
+      const order: any = await Order.findById(rma.orderId);
+      if (!order) {
+        res.status(404).json({ error: 'Order not found' });
+        return;
+      }
+
+      let computedAmount = 0;
+      for (const item of rma.items) {
+        const line = order.items.find(
+          (orderItem: any) => String(orderItem.productId) === String(item.productId)
+        );
+        if (!line) continue;
+        const unitPrice = Number(line.price ?? (line.subtotal && line.quantity ? line.subtotal / line.quantity : 0)) || 0;
+        computedAmount += unitPrice * Number(item.quantity || 0);
+      }
+      const amount = Math.round(
+        (value.refundAmount ?? rma.refundAmount ?? computedAmount) * 100
+      ) / 100;
+      if (!amount || amount <= 0) {
+        res.status(400).json({
+          error: 'Add a refundAmount for this return or ensure the returned items have prices.',
+        });
+        return;
+      }
+
       try {
-        const { Order: OrderModel } = await import('../models/Order');
-        const { Payment } = await import('../models/Payment');
-        const { refundRazorpayPayment } = await import('../services/razorpay');
-        const order: any = await OrderModel.findById(rma.orderId).lean();
-        const payment: any = order?.razorpayPaymentId
-          ? await Payment.findOne({ razorpayPaymentId: order.razorpayPaymentId })
-          : await Payment.findOne({ orderId: rma.orderId, status: 'captured' }).sort({ createdAt: -1 });
-        const amount = value.refundAmount ?? rma.refundAmount ?? order?.total ?? 0;
-        if (order?.razorpayPaymentId && amount > 0) {
-          const rf: any = await refundRazorpayPayment(order.razorpayPaymentId, amount);
-          rma.razorpayRefundId = String(rf.id || rf.refund_id || '');
-          rma.refundedAt = new Date();
-          if (payment) {
-            payment.refundId = rma.razorpayRefundId;
-            payment.refundAmount = amount;
-            payment.status = 'refunded';
-            await payment.save().catch(() => {});
-          }
-        } else {
-          // COD / manual: record refund to requested UPI/bank destination
-          rma.refundedAt = new Date();
-        }
-        if (amount) rma.refundAmount = amount;
+        const result = await createOrderRefund({
+          orderId: rma.orderId.toString(),
+          amount,
+          notes: `Return ${rma._id.toString()} — ${rma.reason}`.slice(0, 500),
+          destination: rma.refundMethod || 'source',
+          upiId: rma.upiId,
+          bankAccountName: rma.bankAccountName,
+          bankAccountNumber: rma.bankAccountNumber,
+          bankIfsc: rma.bankIfsc,
+          adminId: req.user?.userId,
+        });
+        const refund: any = result.refund;
+        rma.refundAmount = refund?.amount ?? amount;
+        rma.razorpayRefundId = refund?.razorpayRefundId || rma.razorpayRefundId;
+        rma.refundedAt = new Date();
       } catch (e: any) {
-        console.error('Razorpay auto-refund failed:', e.response?.data || e.message);
-        // Keep status but surface error so admin can retry
-        await rma.save().catch(() => {});
-        res.status(502).json({ error: 'Razorpay refund failed', details: e.response?.data || e.message });
+        if (e instanceof RefundError) {
+          res.status(e.status).json({ error: e.message, details: e.details });
+          return;
+        }
+        console.error('Return refund failed:', e.response?.data || e.message);
+        res.status(502).json({ error: 'Refund failed', details: e.response?.data || e.message });
         return;
       }
     }
+
+    rma.status = nextStatus;
     await rma.save();
 
     emitToUser(rma.userId.toString(), 'returnUpdated', { rmaId: rma._id.toString(), status: rma.status, orderNumber: rma.orderNumber });

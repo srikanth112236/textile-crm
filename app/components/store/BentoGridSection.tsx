@@ -29,7 +29,7 @@ export function BentoGridSection() {
         >
           <Image
             src="https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=1000&q=80"
-            alt="Oversized T-Shirts Collection"
+            alt=""
             fill
             className="object-cover group-hover:scale-105 transition-transform duration-700"
             sizes="(max-width: 768px) 100vw, 66vw"
@@ -59,7 +59,7 @@ export function BentoGridSection() {
         >
           <Image
             src="https://images.unsplash.com/photo-1617137968427-85924c800a22?auto=format&fit=crop&w=800&q=80"
-            alt="Ethnic & Festive Kurtas"
+            alt=""
             fill
             className="object-cover group-hover:scale-105 transition-transform duration-700"
             sizes="(max-width: 768px) 100vw, 33vw"
@@ -88,7 +88,7 @@ export function BentoGridSection() {
         >
           <Image
             src="https://images.unsplash.com/photo-1516257984-b1b4d707412e?auto=format&fit=crop&w=800&q=80"
-            alt="Cargo Joggers Collection"
+            alt=""
             fill
             className="object-cover group-hover:scale-105 transition-transform duration-700"
             sizes="(max-width: 768px) 100vw, 66vw"
@@ -113,7 +113,7 @@ export function BentoGridSection() {
         >
           <Image
             src="https://images.unsplash.com/photo-1602810318383-e386cc2a3ccf?auto=format&fit=crop&w=600&q=80"
-            alt="Linen Shirts"
+            alt=""
             fill
             className="object-cover group-hover:scale-105 transition-transform duration-700 opacity-70"
             sizes="(max-width: 768px) 100vw, 33vw"

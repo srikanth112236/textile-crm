@@ -579,7 +579,7 @@ export default function ProductVariantsManager({
             Create variations (size, color, etc.)
           </p>
         </div>
-        <Switch checked={hasVariants} onCheckedChange={onHasVariantsChange} />
+        <Switch aria-label="Enable variants" checked={hasVariants} onCheckedChange={onHasVariantsChange} />
       </div>
 
       {hasVariants && (
@@ -640,7 +640,7 @@ export default function ProductVariantsManager({
                           setNewAttribute((prev) => ({ ...prev, type: value }))
                         }
                       >
-                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectTrigger aria-label="Attribute display type"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           {ATTRIBUTE_TYPES.map((type) => (
                             <SelectItem key={type.value} value={type.value}>
@@ -653,6 +653,7 @@ export default function ProductVariantsManager({
                     <div className="flex items-center justify-between">
                       <Label>Required</Label>
                       <Switch
+                        aria-label="Attribute required"
                         checked={newAttribute.required !== false}
                         onCheckedChange={(checked) => setNewAttribute((prev) => ({ ...prev, required: checked }))}
                       />
@@ -664,6 +665,7 @@ export default function ProductVariantsManager({
                       </p>
                       <div className="flex gap-2">
                         <Input
+                          aria-label="New attribute option value"
                           value={newOptionValue}
                           onChange={(e) => setNewOptionValue(e.target.value)}
                           placeholder={newAttribute.name ? `e.g., values for ${newAttribute.name}` : 'e.g., Red, Large, 64GB'}
@@ -671,6 +673,7 @@ export default function ProductVariantsManager({
                         />
                         {newAttribute.type === 'color' && (
                           <Input
+                            aria-label="Colour swatch value"
                             type="color"
                             value={newOptionColor}
                             onChange={(e) => setNewOptionColor(e.target.value)}
@@ -730,10 +733,10 @@ export default function ProductVariantsManager({
                       </div>
                     </div>
                     <div className="flex gap-0.5 flex-shrink-0">
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditingAttribute(attr); setNewAttribute({ ...attr }); setAttributeDialogOpen(true); }}>
+                      <Button variant="ghost" size="icon" aria-label={`Edit ${attr.name} attribute`} className="h-7 w-7" onClick={() => { setEditingAttribute(attr); setNewAttribute({ ...attr }); setAttributeDialogOpen(true); }}>
                         <Edit className="h-3 w-3" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setDeleteAttributeDialog({ open: true, attribute: attr })}>
+                      <Button variant="ghost" size="icon" aria-label={`Delete ${attr.name} attribute`} className="h-7 w-7" onClick={() => setDeleteAttributeDialog({ open: true, attribute: attr })}>
                         <Trash2 className="h-3 w-3 text-destructive" />
                       </Button>
                     </div>
@@ -805,6 +808,7 @@ export default function ProductVariantsManager({
                   <div className="flex items-center gap-2">
                     <Input 
                       type="number" 
+                      aria-label="Bulk price"
                       placeholder="Price" 
                       value={bulkPrice} 
                       onChange={(e) => setBulkPrice(e.target.value)} 
@@ -813,6 +817,7 @@ export default function ProductVariantsManager({
                     <Button variant="outline" size="sm" className="h-8 px-2 text-xs" onClick={applyBulkPrice}>Set</Button>
                     <Input 
                       type="number" 
+                      aria-label="Bulk stock"
                       placeholder="Stock" 
                       value={bulkStock} 
                       onChange={(e) => setBulkStock(e.target.value)} 
@@ -828,7 +833,7 @@ export default function ProductVariantsManager({
                 <Table className="text-sm">
                   <TableHeader className="sticky top-0 bg-card z-10">
                     <TableRow className="bg-muted/50 hover:bg-muted/50">
-                      <TableHead className="w-10 p-2 text-center text-xs">⭐</TableHead>
+                      <TableHead className="w-10 p-2 text-center text-xs">⭐<span className="sr-only">Default variant</span></TableHead>
                       <TableHead className="p-2 text-xs min-w-[100px]">SKU</TableHead>
                       {variantAttributes.map((attr) => (
                         <TableHead key={attr.name} className="p-2 text-xs min-w-[60px]">
@@ -839,7 +844,7 @@ export default function ProductVariantsManager({
                       <TableHead className="w-16 p-2 text-xs text-right">Stock</TableHead>
                       <TableHead className="w-10 p-2 text-xs text-center">📷</TableHead>
                       <TableHead className="w-12 p-2 text-xs text-center">On</TableHead>
-                      <TableHead className="w-10 p-2 text-xs"></TableHead>
+                      <TableHead className="w-10 p-2 text-xs"><span className="sr-only">Actions</span></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -852,6 +857,7 @@ export default function ProductVariantsManager({
                           <input 
                             type="radio" 
                             name="defaultVariant" 
+                            aria-label={`Set ${variant.sku} as default variant`}
                             checked={variant.isDefault} 
                             onChange={() => setDefaultVariant(pageIndex)} 
                             className="h-3 w-3 cursor-pointer accent-primary" 
@@ -891,6 +897,7 @@ export default function ProductVariantsManager({
                             type="number" 
                             step="0.01" 
                             min="0" 
+                            aria-label={`Price for ${variant.sku}`}
                             value={variant.price} 
                             onChange={(e) => updateVariantSKU(pageIndex, { price: parseFloat(e.target.value) || 0 })} 
                             className="w-full h-7 text-xs text-right tabular-nums px-1" 
@@ -900,6 +907,7 @@ export default function ProductVariantsManager({
                           <Input 
                             type="number" 
                             min="0" 
+                            aria-label={`Stock for ${variant.sku}`}
                             value={variant.stock} 
                             onChange={(e) => updateVariantSKU(pageIndex, { stock: parseInt(e.target.value, 10) || 0 })} 
                             className="w-full h-7 text-xs text-right tabular-nums px-1" 
@@ -909,6 +917,7 @@ export default function ProductVariantsManager({
                           <Button 
                             variant="ghost" 
                             size="sm" 
+                            aria-label={`Manage images for ${variant.sku}`}
                             onClick={() => openImageDialog(pageIndex)} 
                             className="relative h-7 w-7 p-0"
                           >
@@ -922,6 +931,7 @@ export default function ProductVariantsManager({
                         </TableCell>
                         <TableCell className="p-2 text-center">
                           <Switch 
+                            aria-label={`Enable ${variant.sku}`}
                             checked={variant.isEnabled} 
                             onCheckedChange={(checked) => updateVariantSKU(pageIndex, { isEnabled: checked })}
                             className="scale-75"
@@ -931,7 +941,8 @@ export default function ProductVariantsManager({
                           <Button 
                             variant="ghost" 
                             size="icon" 
-                            onClick={() => deleteVariantSKU(pageIndex)}
+                            aria-label={`Delete variant ${variant.sku}`}
+                            onClick={() => deleteVariantSKU(pageIndex)} 
                             className="h-6 w-6 text-muted-foreground hover:text-destructive"
                           >
                             <Trash2 className="h-3 w-3" />
@@ -950,11 +961,11 @@ export default function ProductVariantsManager({
                     {(currentPage - 1) * VARIANTS_PER_PAGE + 1}-{Math.min(currentPage * VARIANTS_PER_PAGE, variantSKUs.length)} of {variantSKUs.length}
                   </span>
                   <div className="flex items-center gap-1">
-                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1}>
+                    <Button variant="ghost" size="sm" aria-label="Previous variants page" className="h-6 w-6 p-0" onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1}>
                       <ChevronLeft className="h-3 w-3" />
                     </Button>
                     <span className="px-2">{currentPage}/{totalPages}</span>
-                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>
+                    <Button variant="ghost" size="sm" aria-label="Next variants page" className="h-6 w-6 p-0" onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>
                       <ChevronRight className="h-3 w-3" />
                     </Button>
                   </div>

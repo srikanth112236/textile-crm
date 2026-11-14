@@ -33,6 +33,26 @@ module.exports = {
   additionalPaths: async () => {
     const paths = [];
     // All active products → /products/:id
+    // Static storefront pages (home, PLP, categories index, footer/legal pages).
+    const staticPaths = [
+      { loc: '/', changefreq: 'daily', priority: 1.0 },
+      { loc: '/products', changefreq: 'daily', priority: 0.9 },
+      { loc: '/categories', changefreq: 'weekly', priority: 0.8 },
+      { loc: '/track-order', changefreq: 'monthly', priority: 0.4 },
+      { loc: '/about', changefreq: 'monthly', priority: 0.5 },
+      { loc: '/contact', changefreq: 'monthly', priority: 0.5 },
+      { loc: '/shipping', changefreq: 'monthly', priority: 0.5 },
+      { loc: '/returns', changefreq: 'monthly', priority: 0.5 },
+      { loc: '/faq', changefreq: 'monthly', priority: 0.5 },
+      { loc: '/support', changefreq: 'monthly', priority: 0.5 },
+      { loc: '/privacy', changefreq: 'yearly', priority: 0.3 },
+      { loc: '/terms', changefreq: 'yearly', priority: 0.3 },
+      { loc: '/cookies', changefreq: 'yearly', priority: 0.3 },
+    ];
+    for (const page of staticPaths) {
+      paths.push({ ...page, lastmod: new Date().toISOString() });
+    }
+
     const products = await fetchJson('/api/products?status=active&limit=1000');
     for (const p of products?.data || []) {
       paths.push({

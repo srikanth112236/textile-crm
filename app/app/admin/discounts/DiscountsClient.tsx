@@ -189,8 +189,11 @@ export default function DiscountsClient() {
   useEffect(() => {
     fetchDiscounts();
     import('@/lib/api/categories')
-      .then((m) => m.categoriesApi.getCategories())
-      .then((r) => setAllCategories(((r as any).data || []) as any))
+      .then(async (m) => {
+        const r = await m.categoriesApi.getCategories();
+        // Endpoint returns a nested tree; the scope picker needs a flat list.
+        setAllCategories(m.flattenCategories(r.data || []));
+      })
       .catch(() => {});
   }, []);
 
@@ -569,6 +572,7 @@ export default function DiscountsClient() {
           <div className="flex items-center gap-2 shrink-0">
             <span className="text-[9px] uppercase tracking-widest font-extrabold text-slate-400">Per page</span>
             <select
+              aria-label="Discounts per page"
               value={perPage}
               onChange={(e) => setPerPage(Number(e.target.value))}
               className="h-8 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-[11px] font-bold px-2 outline-none focus:ring-2 focus:ring-amber-500"

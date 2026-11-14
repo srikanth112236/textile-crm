@@ -60,6 +60,8 @@ app.use('/uploads', (req, res, next) => {
   res.header('Access-Control-Allow-Credentials', 'true');
   res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  // Allow <video>/<img> on the storefront origin to load these files.
+  res.header('Cross-Origin-Resource-Policy', 'cross-origin');
   
   // Handle preflight requests
   if (req.method === 'OPTIONS') {

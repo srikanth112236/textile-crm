@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import Joi from 'joi';
-import { Settings, DEFAULT_SETTINGS } from '../models/Settings';
+import { Settings, DEFAULT_SETTINGS, DEFAULT_ANNOUNCEMENTS } from '../models/Settings';
 import { AuditLog, AuditAction } from '../models/AuditLog';
 
 async function getOrCreateSettings() {
@@ -53,7 +53,21 @@ function toPublicSettings(settings: any) {  return {
       enabled: settings.whatsapp.enabled,
       supportNumber: settings.whatsapp.supportNumber,
     },
-    storefront: settings.storefront,
+    storefront: (() => {
+      const list = Array.isArray(settings.storefront?.announcements)
+        ? settings.storefront.announcements.filter((m: string) => typeof m === 'string' && m.trim().length > 0)
+        : [];
+      // Legacy single announcement (stores created before the marquee list).
+      const legacy = (settings.storefront?.announcement || '').trim();
+      const legacyIsDefault = legacy === 'Free shipping on orders over ₹999';
+      const merged = list.length > 0
+        ? list
+        : [...(legacy && !legacyIsDefault ? [legacy] : []), ...DEFAULT_ANNOUNCEMENTS];
+      return {
+        ...settings.storefront,
+        announcements: merged,
+      };
+    })(),
   };
 }
 
@@ -155,6 +169,10 @@ const updateSettingsSchema = Joi.object({
       .max(20)
       .optional(),
     announcement: Joi.string().trim().max(300).optional().allow(''),
+    announcements: Joi.array()
+      .items(Joi.string().trim().min(3).max(300))
+      .max(30)
+      .optional(),
   }).optional(),
 });
 

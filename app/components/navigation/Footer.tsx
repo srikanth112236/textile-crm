@@ -19,25 +19,25 @@ export function Footer() {
             <p className="text-sm text-muted-foreground">
               Modern men's fashion — fast browsing, easy discovery, secure UPI/Card/COD payment, live tracking & easy exchanges.
             </p>
-            <div className="flex space-x-4">
-              <a href="#" className="text-muted-foreground hover:text-primary transition-colors" aria-label="Facebook">
+            <div className="flex space-x-4" role="group" aria-label="Social media">
+              <span className="text-muted-foreground" aria-hidden="true" title="Facebook">
                 <Facebook className="h-5 w-5" />
-              </a>
-              <a href="#" className="text-muted-foreground hover:text-primary transition-colors" aria-label="Twitter">
+              </span>
+              <span className="text-muted-foreground" aria-hidden="true" title="Twitter">
                 <Twitter className="h-5 w-5" />
-              </a>
-              <a href="#" className="text-muted-foreground hover:text-primary transition-colors" aria-label="Instagram">
+              </span>
+              <span className="text-muted-foreground" aria-hidden="true" title="Instagram">
                 <Instagram className="h-5 w-5" />
-              </a>
-              <a href="#" className="text-muted-foreground hover:text-primary transition-colors" aria-label="LinkedIn">
+              </span>
+              <span className="text-muted-foreground" aria-hidden="true" title="LinkedIn">
                 <Linkedin className="h-5 w-5" />
-              </a>
+              </span>
             </div>
           </div>
 
           {/* Quick Links */}
           <div>
-            <h3 className="font-semibold mb-4">Quick Links</h3>
+            <h2 className="font-semibold mb-4">Quick Links</h2>
             <ul className="space-y-2 text-sm">
               <li>
                 <Link href="/products" className="text-muted-foreground hover:text-primary transition-colors">
@@ -64,7 +64,7 @@ export function Footer() {
 
           {/* Customer Service */}
           <div>
-            <h3 className="font-semibold mb-4">Customer Service</h3>
+            <h2 className="font-semibold mb-4">Customer Service</h2>
             <ul className="space-y-2 text-sm">
               <li>
                 <Link href="/shipping" className="text-muted-foreground hover:text-primary transition-colors">
@@ -91,7 +91,7 @@ export function Footer() {
 
           {/* Contact Info */}
           <div>
-            <h3 className="font-semibold mb-4">Contact Us</h3>
+            <h2 className="font-semibold mb-4">Contact Us</h2>
             <ul className="space-y-3 text-sm">
               <li className="flex items-start space-x-3">
                 <Mail className="h-4 w-4 mt-0.5 text-muted-foreground" />

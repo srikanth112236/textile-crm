@@ -10,6 +10,15 @@ import {
   guestCreatePaymentOrder,
   guestVerifyPayment,
 } from '../controllers/paymentController';
+import {
+  completeRefund,
+  createRefund,
+  getOrderRefundContext,
+  getPaymentsOverview,
+  getRefundSummary,
+  getRefundableOrders,
+  getRefunds,
+} from '../controllers/refundController';
 import { authenticate } from '../middleware/auth';
 import { requireAdmin } from '../middleware/rbac';
 
@@ -28,5 +37,12 @@ router.post('/verify', verifyPayment);
 router.post('/refund', requireAdmin, refundPayment);
 router.get('/ledger', requireAdmin, getPaymentsLedger);
 router.get('/orders-summary', requireAdmin, getOrdersPaymentSummary);
+router.get('/overview', requireAdmin, getPaymentsOverview);
+router.get('/refunds', requireAdmin, getRefunds);
+router.get('/refunds/summary', requireAdmin, getRefundSummary);
+router.post('/refunds', requireAdmin, createRefund);
+router.post('/refunds/:id/complete', requireAdmin, completeRefund);
+router.get('/refundable-orders', requireAdmin, getRefundableOrders);
+router.get('/orders/:id/refund-context', requireAdmin, getOrderRefundContext);
 
 export default router;

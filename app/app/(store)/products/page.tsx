@@ -5,12 +5,16 @@ import { serverGetJSON, type Paged } from '@/lib/api/serverFetch';
 import type { IProduct } from '@/lib/api/types';
 
 export const metadata: Metadata = {
-  title: 'Products | E-Commerce Platform',
-  description: 'Browse our wide selection of products',
+  title: "Shop Men's Fashion & Apparel | Mentoos",
+  description:
+    'Browse oversized tees, shirts, trousers, joggers and ethnic wear at Mentoos. Filter by size, colour, price, fit and fabric.',
+  alternates: { canonical: '/products' },
   openGraph: {
-    title: 'Products | E-Commerce Platform',
-    description: 'Browse our wide selection of products',
+    title: "Shop Men's Fashion & Apparel | Mentoos",
+    description:
+      'Browse oversized tees, shirts, trousers, joggers and ethnic wear at Mentoos. Filter by size, colour, price, fit and fabric.',
     type: 'website',
+    url: '/products',
   },
 };
 
@@ -110,23 +114,47 @@ async function getProducts(searchParams: Awaited<ProductsPageProps['searchParams
   }
 }
 
+function ProductsListingSkeleton() {
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+      <div className="hidden lg:block lg:col-span-1 h-[520px] rounded-2xl bg-slate-100 dark:bg-slate-800 animate-pulse" />
+      <div className="lg:col-span-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        {[...Array(6)].map((_, i) => (
+          <div key={i} className="h-80 rounded-2xl bg-slate-100 dark:bg-slate-800 animate-pulse" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+async function ProductsListingData({
+  searchParams,
+}: {
+  searchParams: Awaited<ProductsPageProps['searchParams']>;
+}) {
+  const productsData = await getProducts(searchParams);
+  return (
+    <ProductsListingClient
+      initialProducts={productsData.data}
+      initialPagination={productsData.pagination}
+      searchParams={searchParams}
+    />
+  );
+}
+
 export default async function ProductsPage(props: ProductsPageProps) {
   const searchParams = await props.searchParams;
-  const productsData = await getProducts(searchParams);
 
   return (
     <div className="container mx-auto px-4 py-8">
+      {/* Heading is part of the initial shell so first paint is not blocked by the API. */}
       <div className="mb-8">
         <h1 className="text-4xl font-bold mb-2">Products</h1>
         <p className="text-muted-foreground">Discover our amazing collection</p>
       </div>
 
-      <Suspense fallback={<div className="text-center py-12">Loading products...</div>}>
-        <ProductsListingClient
-          initialProducts={productsData.data}
-          initialPagination={productsData.pagination}
-          searchParams={searchParams}
-        />
+      <Suspense fallback={<ProductsListingSkeleton />}>
+        <ProductsListingData searchParams={searchParams} />
       </Suspense>
     </div>
   );

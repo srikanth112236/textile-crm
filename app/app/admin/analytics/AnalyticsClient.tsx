@@ -62,14 +62,14 @@ export default function AnalyticsClient() {
   const formatGrowth = (growth: number) => {
     const isPositive = growth >= 0;
     return (
-      <div className={`flex items-center gap-1 ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
+      <span className={`inline-flex items-center gap-1 ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
         {isPositive ? (
           <TrendingUp className="h-4 w-4" />
         ) : (
           <TrendingDown className="h-4 w-4" />
         )}
         <span className="font-semibold">{Math.abs(growth).toFixed(1)}%</span>
-      </div>
+      </span>
     );
   };
 

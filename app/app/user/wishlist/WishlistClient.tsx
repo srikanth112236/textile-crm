@@ -143,7 +143,7 @@ export const WishlistClient: React.FC = () => {
             </Link>
             <CardContent className="p-4">
               <Link href={`/products/${product._id}`}>
-                <h3 className="font-semibold mb-2 line-clamp-2 hover:underline">{product.name}</h3>
+                <h2 className="font-semibold mb-2 line-clamp-2 hover:underline">{product.name}</h2>
               </Link>
               <div className="flex items-center justify-between mb-4">
                 <span className="text-lg font-bold">{formatPrice(product.price)}</span>

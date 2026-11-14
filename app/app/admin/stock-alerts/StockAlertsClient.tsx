@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -14,286 +14,1090 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { ConfirmationModal } from '@/components/ui/confirmation-modal';
 import {
-  Tabs, TabsContent, TabsList, TabsTrigger,
-} from '@/components/ui/tabs';
-import { Input } from '@/components/ui/input';
-import {
-  AdminTable,
-  AdminTableBody,
-  AdminTableCell,
-  AdminTableHead,
-  AdminTableHeader,
-  AdminTableRow,
-} from '@/components/admin/DataTable';
-import { RowActions } from '@/components/admin/RowActions';
-import {
-  BellRing, Tag, ExternalLink, RefreshCw, Search, X, Filter, ChevronLeft, ChevronRight,
-  Download, ShieldCheck, Clock, AlertTriangle, CheckCircle2, TrendingUp, TrendingDown,
-} from 'lucide-react';
+  ProductStockDialog,
+  ProductThumb,
+  type AlertProductRef,
+  type StockAlertContext,
+} from './ProductStockDialog';
 import { formatPrice } from '@/lib/utils';
 import { alertsApi } from '@/lib/api/alerts';
+import {
+  ArrowUpRight,
+  BellRing,
+  Boxes,
+  Check,
+  CheckCircle2,
+  ChevronRight,
+  Clock,
+  Copy,
+  Download,
+  ExternalLink,
+  Eye,
+  Mail,
+  MessageCircle,
+  Package,
+  Phone,
+  RefreshCw,
+  Search,
+  Sparkles,
+  Tag,
+  Trash2,
+  TrendingDown,
+  X,
+} from 'lucide-react';
 
-type SeverityFilter = 'all' | 'notified' | 'pending';
+// =====================================================
+// TYPES
+// =====================================================
+
+interface BackInStockRow {
+  _id: string;
+  productId?: AlertProductRef | string;
+  productName?: string;
+  size?: string;
+  contact: string;
+  contactType?: 'email' | 'phone';
+  whatsappConsent?: boolean;
+  notified: boolean;
+  createdAt: string;
+}
+
+interface PriceAlertRow {
+  _id: string;
+  productId?: AlertProductRef | string;
+  productName?: string;
+  targetPrice: number;
+  lastNotifiedPrice?: number;
+  contact?: string;
+  contactType?: 'email' | 'phone';
+  active: boolean;
+  createdAt: string;
+}
+
+type TabKey = 'stock' | 'price';
+type StockStatus = 'all' | 'pending' | 'notified';
+type PriceStatus = 'all' | 'active' | 'inactive';
+type DetailState = { productId: string; product: AlertProductRef; context: StockAlertContext };
+
+// =====================================================
+// HELPERS
+// =====================================================
+
+function normalizeProduct(value?: AlertProductRef | string | null): AlertProductRef | null {
+  if (!value) return null;
+  if (typeof value === 'string') return { _id: value };
+  return value;
+}
+
+function stockHealth(stock: number, threshold: number) {
+  if (stock <= 0) return { label: 'Out of stock', dot: 'bg-rose-500', text: 'text-rose-600' };
+  if (stock <= Math.max(1, Math.ceil(threshold / 2))) return { label: 'Critical', dot: 'bg-orange-500', text: 'text-orange-600' };
+  if (stock <= threshold) return { label: 'Low stock', dot: 'bg-amber-500', text: 'text-amber-600' };
+  return { label: 'In stock', dot: 'bg-emerald-500', text: 'text-emerald-600' };
+}
+
+function timeAgo(value?: string) {
+  if (!value) return '—';
+  const then = new Date(value).getTime();
+  if (Number.isNaN(then)) return '—';
+  const seconds = Math.max(0, Math.round((Date.now() - then) / 1000));
+  if (seconds < 60) return 'just now';
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`;
+  return new Date(value).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' });
+}
+
+function contactIcon(type?: string) {
+  if (type === 'phone') return Phone;
+  if (type === 'email') return Mail;
+  return MessageCircle;
+}
+
+// =====================================================
+// PAGE
+// =====================================================
 
 export default function StockAlertsClient() {
   const router = useRouter();
   const { toast } = useToast();
-  const [tab, setTab] = useState<'stock' | 'price'>('stock');
-  const [subs, setSubs] = useState<any[]>([]);
-  const [pending, setPending] = useState(0);
-  const [alerts, setAlerts] = useState<any[]>([]);
-  const [active, setActive] = useState(0);
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  const [tab, setTab] = useState<TabKey>('stock');
   const [loading, setLoading] = useState(true);
+  const [refreshedAt, setRefreshedAt] = useState<Date | null>(null);
+
+  const [subs, setSubs] = useState<BackInStockRow[]>([]);
+  const [pending, setPending] = useState(0);
+  const [priceAlerts, setPriceAlerts] = useState<PriceAlertRow[]>([]);
+  const [activePriceAlerts, setActivePriceAlerts] = useState(0);
+
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'notified' | 'pending'>('all');
+  const [stockStatus, setStockStatus] = useState<StockStatus>('all');
+  const [priceStatus, setPriceStatus] = useState<PriceStatus>('all');
+  const [sort, setSort] = useState('newest');
 
-  useEffect(() => { load(); }, [tab]);
+  const [detail, setDetail] = useState<DetailState | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
 
-  const load = async () => {
+  const [pendingDelete, setPendingDelete] = useState<{ kind: TabKey; id: string; name: string } | null>(null);
+  const [removing, setRemoving] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
     try {
       setLoading(true);
-      const [s, p] = await Promise.all([alertsApi.adminBackInStock(), alertsApi.adminPriceAlerts()]);
-      setSubs(s.subscriptions || []);
-      setPending(s.pending || 0);
-      setAlerts(p.alerts || []);
-      setActive(p.active || 0);
-    } catch (e: any) {
-      toast({ title: 'Load failed', description: e.response?.data?.error || e.message, variant: 'destructive' });
+      const [stockResult, priceResult] = await Promise.allSettled([
+        alertsApi.adminBackInStock(),
+        alertsApi.adminPriceAlerts(),
+      ]);
+
+      if (stockResult.status === 'fulfilled') {
+        setSubs((stockResult.value?.subscriptions as BackInStockRow[]) || []);
+        setPending(stockResult.value?.pending || 0);
+      }
+      if (priceResult.status === 'fulfilled') {
+        setPriceAlerts((priceResult.value?.alerts as PriceAlertRow[]) || []);
+        setActivePriceAlerts(priceResult.value?.active || 0);
+      }
+
+      if (stockResult.status === 'rejected' && priceResult.status === 'rejected') {
+        const reason: any = stockResult.reason;
+        throw new Error(reason?.response?.data?.error || reason?.message || 'Failed to load alerts');
+      }
+
+      setRefreshedAt(new Date());
+    } catch (error: any) {
+      toast({
+        title: 'Load failed',
+        description: error?.response?.data?.error || error?.message,
+        variant: 'destructive',
+      });
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const typing = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable;
+      if (event.key === '/' && !typing) {
+        event.preventDefault();
+        searchRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
+  useEffect(() => {
+    if (!copiedId) return;
+    const timer = setTimeout(() => setCopiedId(null), 1600);
+    return () => clearTimeout(timer);
+  }, [copiedId]);
+
+  useEffect(() => {
+    setSort('newest');
+  }, [tab]);
 
   const filteredStock = useMemo(() => {
-    const q = search.toLowerCase();
-    return subs.filter((s: any) => {
-      const matchText = !q ||
-        (s.productName || '').toLowerCase().includes(q) ||
-        (s.productId?.name || '').toLowerCase().includes(q) ||
-        (s.contact || '').toLowerCase().includes(q) ||
-        (s.size || '').toLowerCase().includes(q);
-      const matchStatus = statusFilter === 'all'
-        || (statusFilter === 'notified' && s.notified)
-        || (statusFilter === 'pending' && !s.notified);
-      return matchText && matchStatus;
+    const query = search.trim().toLowerCase();
+    const rows = subs.filter((row) => {
+      const product = normalizeProduct(row.productId);
+      const matchesText = !query
+        || (row.productName || '').toLowerCase().includes(query)
+        || (product?.name || '').toLowerCase().includes(query)
+        || (product?.sku || '').toLowerCase().includes(query)
+        || (row.contact || '').toLowerCase().includes(query)
+        || (row.size || '').toLowerCase().includes(query);
+      const matchesStatus = stockStatus === 'all'
+        || (stockStatus === 'notified' && row.notified)
+        || (stockStatus === 'pending' && !row.notified);
+      return matchesText && matchesStatus;
     });
-  }, [subs, search, statusFilter]);
 
-  const stockStats = useMemo(() => ({
-    total: subs.length,
-    notified: subs.filter((s: any) => s.notified).length,
-    pending: subs.filter((s: any) => !s.notified).length,
-  }), [subs]);
-
-  const priceFilters = useMemo(() => {
-    const q = search.toLowerCase();
-    return alerts.filter((a: any) => {
-      const matchText = !q ||
-        (a.productName || '').toLowerCase().includes(q) ||
-        (a.productId?.name || '').toLowerCase().includes(q) ||
-        (a.contact || '').toLowerCase().includes(q);
-      return matchText;
+    return [...rows].sort((a, b) => {
+      if (sort === 'oldest') return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      if (sort === 'product') {
+        const aName = normalizeProduct(a.productId)?.name || a.productName || '';
+        const bName = normalizeProduct(b.productId)?.name || b.productName || '';
+        return aName.localeCompare(bName);
+      }
+      if (sort === 'status') return Number(a.notified) - Number(b.notified);
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
-  }, [alerts, search]);
+  }, [subs, search, stockStatus, sort]);
 
-  const getStatusBadge = (notified: boolean) =>
-    <Badge className={notified ? 'bg-emerald-500 text-white text-[10px] font-extrabold rounded-full px-2' : 'bg-amber-500 text-slate-950 text-[10px] font-extrabold rounded-full px-2'}>
-      {notified ? 'NOTIFIED' : 'PENDING'}
-    </Badge>;
+  const filteredPrice = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    const rows = priceAlerts.filter((row) => {
+      const product = normalizeProduct(row.productId);
+      const matchesText = !query
+        || (row.productName || '').toLowerCase().includes(query)
+        || (product?.name || '').toLowerCase().includes(query)
+        || (product?.sku || '').toLowerCase().includes(query)
+        || (row.contact || '').toLowerCase().includes(query);
+      const matchesStatus = priceStatus === 'all'
+        || (priceStatus === 'active' && row.active)
+        || (priceStatus === 'inactive' && !row.active);
+      return matchesText && matchesStatus;
+    });
+
+    return [...rows].sort((a, b) => {
+      if (sort === 'oldest') return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      if (sort === 'product') {
+        const aName = normalizeProduct(a.productId)?.name || a.productName || '';
+        const bName = normalizeProduct(b.productId)?.name || b.productName || '';
+        return aName.localeCompare(bName);
+      }
+      if (sort === 'gap') {
+        const aGap = a.targetPrice - (normalizeProduct(a.productId)?.price || 0);
+        const bGap = b.targetPrice - (normalizeProduct(b.productId)?.price || 0);
+        return bGap - aGap;
+      }
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+  }, [priceAlerts, search, priceStatus, sort]);
+
+  const stats = useMemo(() => {
+    const notified = subs.filter((row) => row.notified).length;
+    const email = subs.filter((row) => row.contactType === 'email').length;
+    const phone = subs.filter((row) => row.contactType === 'phone').length;
+    const whatsapp = subs.filter((row) => row.whatsappConsent).length;
+    const uniqueProducts = new Set(subs.map((row) => normalizeProduct(row.productId)?._id || row.productName)).size;
+    return {
+      total: subs.length,
+      notified,
+      waiting: subs.length - notified,
+      email,
+      phone,
+      whatsapp,
+      uniqueProducts,
+      rate: subs.length > 0 ? Math.round((notified / subs.length) * 100) : 0,
+    };
+  }, [subs]);
+
+  const topProducts = useMemo(() => {
+    const rows = tab === 'stock' ? filteredStock : filteredPrice;
+    const map = new Map<string, { id: string; product: AlertProductRef | null; name: string; count: number }>();
+
+    rows.forEach((row) => {
+      const product = normalizeProduct(row.productId);
+      const key = product?._id || row.productName || '—';
+      const existing = map.get(key);
+      if (existing) {
+        existing.count += 1;
+      } else {
+        map.set(key, {
+          id: product?._id || '',
+          product,
+          name: product?.name || row.productName || 'Unknown product',
+          count: 1,
+        });
+      }
+    });
+
+    return [...map.values()].sort((a, b) => b.count - a.count).slice(0, 5);
+  }, [tab, filteredStock, filteredPrice]);
+
+  const visibleRows = tab === 'stock' ? filteredStock.length : filteredPrice.length;
+  const totalRows = tab === 'stock' ? subs.length : priceAlerts.length;
+
+  const hasFilters = search.trim() !== ''
+    || (tab === 'stock' ? stockStatus !== 'all' : priceStatus !== 'all');
+
+  const openDetail = (row: BackInStockRow | PriceAlertRow, kind: TabKey) => {
+    const product = normalizeProduct(row.productId);
+    if (!product?._id) return;
+    const isStock = kind === 'stock';
+    const stockRow = row as BackInStockRow;
+    const priceRow = row as PriceAlertRow;
+    setDetail({
+      productId: product._id,
+      product,
+      context: {
+        kind,
+        size: isStock ? stockRow.size : undefined,
+        contact: isStock ? stockRow.contact : priceRow.contact,
+        contactType: isStock ? stockRow.contactType : priceRow.contactType,
+        whatsappConsent: isStock ? stockRow.whatsappConsent : undefined,
+        notified: isStock ? stockRow.notified : undefined,
+        active: isStock ? undefined : priceRow.active,
+        targetPrice: isStock ? undefined : priceRow.targetPrice,
+        lastNotifiedPrice: isStock ? undefined : priceRow.lastNotifiedPrice,
+        createdAt: row.createdAt,
+      },
+    });
+    setDetailOpen(true);
+  };
+
+  const copyContact = async (id: string, contact?: string) => {
+    if (!contact) return;
+    try {
+      await navigator.clipboard.writeText(contact);
+      setCopiedId(id);
+    } catch {
+      toast({ title: 'Copy failed', description: 'Your browser blocked clipboard access.', variant: 'destructive' });
+    }
+  };
+
+  const confirmRemove = async () => {
+    if (!pendingDelete) return;
+    try {
+      setRemoving(true);
+      if (pendingDelete.kind === 'stock') {
+        await alertsApi.removeBackInStock(pendingDelete.id);
+        setSubs((rows) => rows.filter((row) => row._id !== pendingDelete.id));
+      } else {
+        await alertsApi.removePriceAlert(pendingDelete.id);
+        setPriceAlerts((rows) => rows.map((row) => (row._id === pendingDelete.id ? { ...row, active: false } : row)));
+      }
+      toast({ title: 'Alert removed', description: pendingDelete.name });
+      setPendingDelete(null);
+    } catch (error: any) {
+      toast({
+        title: 'Could not remove alert',
+        description: error?.response?.data?.error || error?.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setRemoving(false);
+    }
+  };
+
+  const exportCsv = () => {
+    const header = tab === 'stock'
+      ? ['Product', 'SKU', 'Contact', 'Size', 'Status', 'Requested']
+      : ['Product', 'Current price', 'Target price', 'Contact', 'Status', 'Created'];
+    const body = tab === 'stock'
+      ? filteredStock.map((row) => {
+        const product = normalizeProduct(row.productId);
+        return [
+          product?.name || row.productName || '',
+          product?.sku || '',
+          row.contact || '',
+          row.size || '',
+          row.notified ? 'Notified' : 'Pending',
+          row.createdAt,
+        ];
+      })
+      : filteredPrice.map((row) => {
+        const product = normalizeProduct(row.productId);
+        return [
+          product?.name || row.productName || '',
+          product?.price ?? '',
+          row.targetPrice ?? '',
+          row.contact || '',
+          row.active ? 'Active' : 'Inactive',
+          row.createdAt,
+        ];
+      });
+
+    const csv = [header, ...body]
+      .map((line) => line.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `retention-alerts-${tab}-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast({ title: 'Export ready', description: `${body.length} rows exported to CSV.` });
+  };
+
+  const clearFilters = () => {
+    setSearch('');
+    setStockStatus('all');
+    setPriceStatus('all');
+  };
+
+  const kpis = [
+    {
+      key: 'waiting',
+      label: 'Waiting for restock',
+      value: stats.waiting,
+      sub: `${pending} pending notifications`,
+      icon: BellRing,
+      tone: 'bg-violet-500/10 text-violet-600',
+      active: tab === 'stock' && stockStatus === 'pending',
+      onClick: () => { setTab('stock'); setStockStatus('pending'); },
+    },
+    {
+      key: 'notified',
+      label: 'Notified customers',
+      value: stats.notified,
+      sub: `${stats.rate}% delivery rate`,
+      icon: CheckCircle2,
+      tone: 'bg-emerald-500/10 text-emerald-600',
+      active: tab === 'stock' && stockStatus === 'notified',
+      onClick: () => { setTab('stock'); setStockStatus('notified'); },
+    },
+    {
+      key: 'requests',
+      label: 'Total requests',
+      value: stats.total,
+      sub: `${stats.uniqueProducts} unique products`,
+      icon: Boxes,
+      tone: 'bg-slate-500/10 text-slate-600',
+      active: tab === 'stock' && stockStatus === 'all',
+      onClick: () => { setTab('stock'); setStockStatus('all'); },
+    },
+    {
+      key: 'price',
+      label: 'Active price alerts',
+      value: activePriceAlerts,
+      sub: `${priceAlerts.length} total subscribers`,
+      icon: Tag,
+      tone: 'bg-amber-500/10 text-amber-600',
+      active: tab === 'price',
+      onClick: () => { setTab('price'); setPriceStatus('active'); },
+    },
+    {
+      key: 'whatsapp',
+      label: 'WhatsApp opted-in',
+      value: stats.whatsapp,
+      sub: `${stats.email} email · ${stats.phone} phone`,
+      icon: MessageCircle,
+      tone: 'bg-emerald-500/10 text-emerald-600',
+      active: false,
+      onClick: () => { setTab('stock'); setStockStatus('all'); },
+    },
+  ];
 
   return (
-    <div className="px-3 py-4 space-y-4 max-w-6xl mx-auto">
+    <div className="w-full space-y-3 px-3 py-3 sm:px-4 lg:px-5">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
-        <div className="flex items-center gap-2.5">
-          <div className="h-9 w-9 rounded-xl bg-violet-500/10 text-violet-600 dark:text-violet-400 flex items-center justify-center shrink-0">
-            <BellRing className="h-4 w-4" />
+      <div className="flex flex-wrap items-start justify-between gap-2.5">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white shadow-sm">
+            <BellRing className="h-5 w-5" />
+            {stats.waiting > 0 && (
+              <span className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full bg-amber-400 ring-2 ring-white dark:ring-slate-950" />
+            )}
           </div>
-          <div>
-            <h1 className="text-xl font-extrabold tracking-tight leading-none">Retention Alerts</h1>
-            <p className="text-[11px] text-muted-foreground mt-1">
-              Back-in-stock subscriptions and price-drop alerts · Auto-notified via email + WhatsApp + in-app
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <h1 className="text-lg font-extrabold leading-none tracking-tight">Retention Alerts</h1>
+              <Badge className="rounded-full bg-violet-500/10 px-2 py-0 text-[9px] font-extrabold uppercase tracking-wider text-violet-700 dark:text-violet-300">
+                Live queue
+              </Badge>
+            </div>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Back-in-stock and price-drop requests with live stock, warehouse split and full movement history.
             </p>
           </div>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={load} className="h-9 rounded-xl text-[11px] font-extrabold shadow-sm">
-            <RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Refresh
+        <div className="flex shrink-0 items-center gap-1.5">
+          <Button variant="outline" size="sm" onClick={exportCsv} className="h-8 rounded-lg px-2.5 text-[10px] font-extrabold">
+            <Download className="mr-1.5 h-3 w-3" /> Export
+          </Button>
+          <Button
+            size="sm"
+            onClick={load}
+            disabled={loading}
+            className="h-8 rounded-lg bg-violet-600 px-3 text-[10px] font-extrabold text-white hover:bg-violet-700"
+          >
+            <RefreshCw className={`mr-1.5 h-3 w-3 ${loading ? 'animate-spin' : ''}`} /> Refresh
           </Button>
         </div>
       </div>
 
-      {/* KPI Tiles */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-        {[
-          { label: 'Back-in-stock', value: stockStats.total, sub: `${stockStats.pending} pending · ${stockStats.notified} notified`, tone: 'text-violet-600', ring: 'border-violet-200 dark:border-violet-800' },
-          { label: 'Price alerts', value: active, sub: 'Active subscribers', tone: 'text-amber-600', ring: 'border-amber-200 dark:border-amber-800' },
-          { label: 'Price subscribers', value: alerts.length, sub: 'Price-drop subscriptions', tone: 'text-emerald-600', ring: 'border-emerald-200 dark:border-emerald-800' },
-          { label: 'Notified rate', value: stockStats.total > 0 ? Math.round((stockStats.notified / stockStats.total) * 100) + '%' : '—', sub: 'Back-in-stock delivery rate', tone: 'text-slate-900 dark:text-white', ring: 'border-slate-200 dark:border-slate-800' },
-        ].map((k) => (
-          <Card key={k.label} className={`rounded-xl border ${k.ring} shadow-sm`}>
-            <CardContent className="p-2.5">
-              <div className="text-[9px] uppercase tracking-widest font-extrabold text-muted-foreground">{k.label}</div>
-              <div className={`text-xl font-black tracking-tight mt-0.5 ${k.tone}`}>{k.value}</div>
-              <div className="text-[9px] text-muted-foreground font-medium truncate">{k.sub}</div>
-            </CardContent>
-          </Card>
+      {/* KPI tiles */}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
+        {kpis.map((kpi) => (
+          <button
+            key={kpi.key}
+            type="button"
+            onClick={kpi.onClick}
+            className={`group flex flex-col rounded-xl border p-2.5 text-left shadow-sm transition-all hover:-translate-y-px hover:shadow ${
+              kpi.active
+                ? 'border-violet-400 bg-violet-50/50 ring-1 ring-violet-300 dark:border-violet-700 dark:bg-violet-950/20'
+                : 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900'
+            }`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="truncate text-[9px] font-extrabold uppercase tracking-widest text-muted-foreground">{kpi.label}</span>
+              <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg ${kpi.tone}`}>
+                <kpi.icon className="h-3 w-3" />
+              </span>
+            </div>
+            <span className="mt-1 text-xl font-black leading-none tracking-tight">{kpi.value}</span>
+            <span className="mt-1 truncate text-[9px] font-medium text-muted-foreground">{kpi.sub}</span>
+          </button>
         ))}
       </div>
 
-      {/* Tab Picker */}
-      <Tabs value={tab} onValueChange={(v) => setTab(v as 'stock' | 'price')}>
-        <TabsList className="h-9 rounded-xl shadow-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 gap-0.5 p-0.5">
-          <TabsTrigger value="stock" className="h-7 rounded-lg text-[10px] font-extrabold uppercase tracking-widest data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=inactive]:hover:bg-violet-500/10">
-            Back-in-Stock <Badge variant="secondary" className="ml-1 bg-violet-100 text-violet-700 dark:bg-violet-900 dark:text-violet-200 text-[9px] font-extrabold">{pending}</Badge>
-          </TabsTrigger>
-          <TabsTrigger value="price" className="h-7 rounded-lg text-[10px] font-extrabold uppercase tracking-widest data-[state=active]:bg-amber-500 data-[state=active]:text-slate-950 data-[state=inactive]:hover:bg-amber-500/10">
-            Price Drops <Badge variant="secondary" className="ml-1 bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-200 text-[9px] font-extrabold">{active}</Badge>
-          </TabsTrigger>
-        </TabsList>
-      </Tabs>
-
-      {/* Back-in-Stock Table */}
-      {tab === 'stock' && (
-        <Card className="rounded-2xl border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-3.5 py-2.5 border-b border-slate-200 dark:border-slate-800">
-            <div className="flex items-center gap-2">
-              <BellRing className="h-3.5 w-3.5 text-violet-500" />
-              <h2 className="text-sm font-extrabold tracking-tight">Back-in-Stock Subscriptions</h2>
-              <Badge variant="outline" className="text-[9px] font-extrabold rounded-full px-1.5">{filteredStock.length} / {subs.length}</Badge>
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_280px]">
+        {/* Main queue */}
+        <div className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-card shadow-sm dark:border-slate-800">
+          {/* Tabs + search */}
+          <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 px-2.5 py-2 dark:border-slate-800">
+            <div className="flex items-center gap-0.5 rounded-lg bg-slate-100 p-0.5 dark:bg-slate-800">
+              {([
+                { key: 'stock', label: 'Back-in-stock', count: subs.length, icon: BellRing },
+                { key: 'price', label: 'Price drops', count: priceAlerts.length, icon: Tag },
+              ] as const).map((item) => (
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={() => setTab(item.key)}
+                  className={`flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[10px] font-extrabold uppercase tracking-wider transition-colors ${
+                    tab === item.key
+                      ? item.key === 'stock'
+                        ? 'bg-violet-600 text-white shadow-sm'
+                        : 'bg-amber-500 text-slate-950 shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <item.icon className="h-3 w-3" />
+                  {item.label}
+                  <span className={`rounded-full px-1 text-[9px] ${tab === item.key ? 'bg-white/20' : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300'}`}>
+                    {item.count}
+                  </span>
+                </button>
+              ))}
             </div>
-            <div className="flex gap-2">
-              <div className="relative w-56">
-                <Search className="h-3.5 w-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+
+            <div className="ml-auto flex items-center gap-1.5">
+              <div className="relative w-full min-w-[140px] sm:w-56">
+                <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
                 <Input
+                  ref={searchRef}
                   value={search}
-                  onChange={(e) => setSearch(e.target.value)}
+                  onChange={(event) => setSearch(event.target.value)}
                   placeholder="Product, SKU, contact…"
-                  className="pl-8 pr-7 h-8 rounded-xl text-[11px]"
+                  className="h-8 rounded-lg pl-8 pr-12 text-[11px]"
                 />
-                {search && (
-                  <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-red-500"><X className="h-3 w-3" /></button>
+                {search ? (
+                  <button
+                    type="button"
+                    onClick={() => setSearch('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-rose-500"
+                    aria-label="Clear search"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                ) : (
+                  <kbd className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 rounded border border-slate-200 bg-slate-50 px-1 text-[9px] font-bold text-slate-400 dark:border-slate-700 dark:bg-slate-800">
+                    /
+                  </kbd>
                 )}
               </div>
-              <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as SeverityFilter)}>
-                <SelectTrigger className="h-8 rounded-xl text-[10px] w-32">
+            </div>
+          </div>
+
+          {/* Filters */}
+          <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100 px-2.5 py-1.5 dark:border-slate-800">
+            {tab === 'stock'
+              ? ([
+                { key: 'all', label: 'All', count: subs.length },
+                { key: 'pending', label: 'Pending', count: stats.waiting },
+                { key: 'notified', label: 'Notified', count: stats.notified },
+              ] as const).map((filter) => (
+                <button
+                  key={filter.key}
+                  type="button"
+                  onClick={() => setStockStatus(filter.key)}
+                  className={`flex h-6 items-center gap-1 rounded-full border px-2 text-[9px] font-extrabold uppercase tracking-wider transition-colors ${
+                    stockStatus === filter.key
+                      ? 'border-violet-500 bg-violet-500 text-white'
+                      : 'border-slate-200 bg-white text-muted-foreground hover:border-violet-300 hover:text-violet-700 dark:border-slate-800 dark:bg-slate-900'
+                  }`}
+                >
+                  {filter.label}
+                  <span className={`${stockStatus === filter.key ? 'text-white/80' : 'text-slate-400'}`}>{filter.count}</span>
+                </button>
+              ))
+              : ([
+                { key: 'all', label: 'All', count: priceAlerts.length },
+                { key: 'active', label: 'Active', count: activePriceAlerts },
+                { key: 'inactive', label: 'Inactive', count: priceAlerts.length - activePriceAlerts },
+              ] as const).map((filter) => (
+                <button
+                  key={filter.key}
+                  type="button"
+                  onClick={() => setPriceStatus(filter.key)}
+                  className={`flex h-6 items-center gap-1 rounded-full border px-2 text-[9px] font-extrabold uppercase tracking-wider transition-colors ${
+                    priceStatus === filter.key
+                      ? 'border-amber-500 bg-amber-500 text-slate-950'
+                      : 'border-slate-200 bg-white text-muted-foreground hover:border-amber-300 hover:text-amber-700 dark:border-slate-800 dark:bg-slate-900'
+                  }`}
+                >
+                  {filter.label}
+                  <span className={`${priceStatus === filter.key ? 'text-slate-900/70' : 'text-slate-400'}`}>{filter.count}</span>
+                </button>
+              ))}
+
+            {hasFilters && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearFilters}
+                className="h-6 rounded-full px-2 text-[9px] font-extrabold text-rose-600 hover:bg-rose-500/10"
+              >
+                Clear
+              </Button>
+            )}
+
+            <div className="ml-auto flex items-center gap-1.5">
+              <span className="hidden text-[9px] font-semibold text-muted-foreground sm:inline">
+                {visibleRows} of {totalRows}
+              </span>
+              <Select value={sort} onValueChange={setSort}>
+                <SelectTrigger className="h-6 w-[118px] rounded-full border-slate-200 text-[9px] font-bold dark:border-slate-800">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="notified">Notified</SelectItem>
+                  <SelectItem value="newest">Newest first</SelectItem>
+                  <SelectItem value="oldest">Oldest first</SelectItem>
+                  <SelectItem value="product">Product A–Z</SelectItem>
+                  {tab === 'stock'
+                    ? <SelectItem value="status">Status</SelectItem>
+                    : <SelectItem value="gap">Largest gap</SelectItem>}
                 </SelectContent>
               </Select>
             </div>
           </div>
 
-          <AdminTable>
-            <AdminTableHeader>
-              <AdminTableRow>
-                <AdminTableHead className="text-[9px] uppercase tracking-widest font-extrabold text-slate-500 dark:text-slate-400 whitespace-nowrap">Product</AdminTableHead>
-                <AdminTableHead className="text-[9px] uppercase tracking-widest font-extrabold text-slate-500 dark:text-slate-400 whitespace-nowrap">Contact</AdminTableHead>
-                <AdminTableHead className="text-[9px] uppercase tracking-widest font-extrabold text-slate-500 dark:text-slate-400 whitespace-nowrap">WhatsApp</AdminTableHead>
-                <AdminTableHead className="text-[9px] uppercase tracking-widest font-extrabold text-slate-500 dark:text-slate-400 whitespace-nowrap">Status</AdminTableHead>
-                <AdminTableHead className="text-[9px] uppercase tracking-widest font-extrabold text-slate-500 dark:text-slate-400 whitespace-nowrap">Subscribed</AdminTableHead>
-                <AdminTableHead className="text-[9px] uppercase tracking-widest font-extrabold text-slate-500 dark:text-slate-400 whitespace-nowrap">Size</AdminTableHead>
-                <AdminTableHead className="text-[9px] uppercase tracking-widest font-extrabold text-slate-500 dark:text-slate-400 whitespace-nowrap text-right">Actions</AdminTableHead>
-              </AdminTableRow>
-            </AdminTableHeader>
-            <AdminTableBody>
-              {filteredStock.length > 0 ? filteredStock.map((s: any) => (
-                <AdminTableRow key={s._id}>
-                  <AdminTableCell>
-                    <div className="max-w-[220px]">
-                      <div className="font-bold text-xs truncate">{s.productName || (s.productId?.name) || s.productId}</div>
-                      <div className="text-[9px] text-muted-foreground truncate font-mono">SKU: {(s.productId?.sku || s.sku || '—')}</div>
-                    </div>
-                  </AdminTableCell>
-                  <AdminTableCell className="font-mono text-[11px] truncate max-w-[160px]">{s.contact}</AdminTableCell>
-                  <AdminTableCell className="text-[11px] whitespace-nowrap">{s.whatsappConsent ? 'Yes' : '—'}</AdminTableCell>
-                  <AdminTableCell>{getStatusBadge(s.notified)}</AdminTableCell>
-                  <AdminTableCell className="text-[10px] text-muted-foreground whitespace-nowrap">{new Date(s.createdAt).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: '2-digit' })}</AdminTableCell>
-                  <AdminTableCell className="text-[11px] font-bold">{s.size || '—'}</AdminTableCell>
-                  <AdminTableCell className="text-right">
-                    <RowActions
-                      label={`Actions for ${s.productName || 'subscription'}`}
-                      items={[
-                        {
-                          label: 'Open product',
-                          icon: <ExternalLink className="h-3.5 w-3.5 mr-2" />,
-                          onSelect: () => router.push(`/admin/products/${typeof s.productId === 'object' ? s.productId._id : s.productId}`),
-                        },
-                      ]}
-                    />
-                  </AdminTableCell>
-                </AdminTableRow>
-              )) : (
-                <AdminTableRow>
-                  <AdminTableCell colSpan={7} className="text-center py-10 text-sm text-muted-foreground">
-                    No subscriptions match your filters.
-                  </AdminTableCell>
-                </AdminTableRow>
-              )}
-            </AdminTableBody>
-          </AdminTable>
-        </Card>
-      )}
-
-      {/* Price-drop Alerts Table */}
-      {tab === 'price' && (
-        <Card className="rounded-2xl border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-          <CardHeader className="pb-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
-            <CardTitle className="text-sm font-extrabold tracking-tight flex items-center gap-2">
-              <Tag className="h-3.5 w-3.5 text-amber-500" /> Price-drop Subscriptions
-              <Badge variant="outline" className="text-[9px] font-extrabold rounded-full px-1.5">{priceFilters.length}</Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-0 overflow-x-auto">
-            {priceFilters.length > 0 ? (
-              <AdminTable>
-                <AdminTableHeader>
-                  <AdminTableRow>
-                    <AdminTableHead className="text-[9px] uppercase tracking-widest font-extrabold text-slate-500 dark:text-slate-400 whitespace-nowrap">Product</AdminTableHead>
-                    <AdminTableHead className="text-[9px] uppercase tracking-widest font-extrabold text-slate-500 dark:text-slate-400 whitespace-nowrap">Target ₹</AdminTableHead>
-                    <AdminTableHead className="text-[9px] uppercase tracking-widest font-extrabold text-slate-500 dark:text-slate-400 whitespace-nowrap">Last Notified At</AdminTableHead>
-                    <AdminTableHead className="text-[9px] uppercase tracking-widest font-extrabold text-slate-500 dark:text-slate-400 whitespace-nowrap">Contact</AdminTableHead>
-                    <AdminTableHead className="text-[9px] uppercase tracking-widest font-extrabold text-slate-500 dark:text-slate-400 whitespace-nowrap">Status</AdminTableHead>
-                    <AdminTableHead className="text-[9px] uppercase tracking-widest font-extrabold text-slate-500 dark:text-slate-400 whitespace-nowrap text-right">Actions</AdminTableHead>
-                  </AdminTableRow>
-                </AdminTableHeader>
-                <AdminTableBody>
-                  {priceFilters.map((a: any) => (
-                    <AdminTableRow key={a._id}>
-                      <AdminTableCell className="font-bold truncate max-w-[220px] text-[13px]">{a.productName || a.productId?.name || a.productId}</AdminTableCell>
-                      <AdminTableCell className="whitespace-nowrap text-[13px] font-bold text-amber-600">{formatPrice(a.targetPrice)}</AdminTableCell>
-                      <AdminTableCell className="whitespace-nowrap text-[13px]">{a.lastNotifiedPrice !== undefined ? formatPrice(a.lastNotifiedPrice) : '—'}</AdminTableCell>
-                      <AdminTableCell className="font-mono text-[11px] truncate max-w-[180px]">{a.contact || 'in-app only'}</AdminTableCell>
-                      <AdminTableCell><Badge variant={a.active ? 'secondary' : 'outline'} className="text-[11px] font-extrabold">{a.active ? 'Active' : 'Off'}</Badge></AdminTableCell>
-                      <AdminTableCell className="text-right">
-                        <RowActions
-                          label={`Actions for ${a.productName || 'price alert'}`}
-                          items={[
-                            {
-                              label: 'Open product',
-                              icon: <ExternalLink className="h-3.5 w-3.5 mr-2" />,
-                              onSelect: () => router.push(`/admin/products/${typeof a.productId === 'object' ? a.productId._id : a.productId}`),
-                            },
-                          ]}
-                        />
-                      </AdminTableCell>
-                    </AdminTableRow>
+          {/* Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px] text-left">
+              <thead>
+                <tr className="border-b border-slate-100 bg-muted/40 dark:border-slate-800">
+                  {(tab === 'stock'
+                    ? ['Product', 'Stock now', 'Contact', 'Size', 'Status', 'Requested', '']
+                    : ['Product', 'Current', 'Target', 'Gap', 'Contact', 'Status', 'Requested', '']
+                  ).map((heading, index) => (
+                    <th
+                      key={`${heading}-${index}`}
+                      className="whitespace-nowrap px-2.5 py-1.5 text-[8px] font-extrabold uppercase tracking-widest text-muted-foreground"
+                    >
+                      {heading}
+                    </th>
                   ))}
-                </AdminTableBody>
-              </AdminTable>
-            ) : (
-              <CardContent className="p-10 text-center text-sm text-muted-foreground">
-                No price alerts found.
-              </CardContent>
-            )}
-          </CardContent>
-        </Card>
-      )}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {loading && visibleRows === 0 ? (
+                  Array.from({ length: 6 }).map((_, index) => (
+                    <tr key={index}>
+                      <td className="px-2.5 py-2" colSpan={tab === 'stock' ? 7 : 8}>
+                        <div className="flex items-center gap-2">
+                          <div className="h-8 w-8 animate-pulse rounded-lg bg-slate-200 dark:bg-slate-800" />
+                          <div className="flex-1 space-y-1">
+                            <div className="h-2.5 w-40 animate-pulse rounded bg-slate-200 dark:bg-slate-800" />
+                            <div className="h-2 w-24 animate-pulse rounded bg-slate-100 dark:bg-slate-800/60" />
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                ) : visibleRows === 0 ? (
+                  <tr>
+                    <td colSpan={tab === 'stock' ? 7 : 8} className="px-3 py-12 text-center">
+                      <Package className="mx-auto h-7 w-7 text-slate-300" />
+                      <p className="mt-1.5 text-xs font-bold">No alerts match this view</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {hasFilters ? 'Try clearing the search or status filter.' : 'New customer requests will appear here automatically.'}
+                      </p>
+                      {hasFilters && (
+                        <Button variant="outline" size="sm" onClick={clearFilters} className="mt-2 h-7 rounded-lg text-[10px] font-extrabold">
+                          Clear filters
+                        </Button>
+                      )}
+                    </td>
+                  </tr>
+                ) : tab === 'stock' ? (
+                  filteredStock.map((row) => {
+                    const product = normalizeProduct(row.productId);
+                    const health = stockHealth(product?.stock ?? 0, product?.lowStockThreshold ?? 10);
+                    const ContactIcon = contactIcon(row.contactType);
+                    return (
+                      <tr
+                        key={row._id}
+                        onClick={() => openDetail(row, 'stock')}
+                        tabIndex={0}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            openDetail(row, 'stock');
+                          }
+                        }}
+                        className="group cursor-pointer transition-colors hover:bg-violet-500/[0.04] focus:bg-violet-500/[0.06] focus:outline-none"
+                      >
+                        <td className="max-w-[260px] px-2.5 py-2">
+                          <div className="flex items-center gap-2">
+                            <ProductThumb images={product?.images} name={product?.name} className="h-8 w-8" />
+                            <div className="min-w-0">
+                              <div className="truncate text-[11px] font-bold group-hover:text-violet-700 dark:group-hover:text-violet-300">
+                                {product?.name || row.productName || 'Unknown product'}
+                              </div>
+                              <div className="truncate font-mono text-[9px] text-muted-foreground">{product?.sku || 'No SKU'}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="whitespace-nowrap px-2.5 py-2">
+                          <span className={`inline-flex items-center gap-1 text-[11px] font-black ${health.text}`}>
+                            <span className={`h-1.5 w-1.5 rounded-full ${health.dot}`} />
+                            {product?.stock ?? 0}
+                          </span>
+                          <div className="text-[9px] text-muted-foreground">{health.label}</div>
+                        </td>
+                        <td className="max-w-[190px] px-2.5 py-2">
+                          <div className="flex items-center gap-1">
+                            <ContactIcon className="h-3 w-3 shrink-0 text-slate-400" />
+                            <span className="truncate text-[10px] font-medium">{row.contact}</span>
+                            <button
+                              type="button"
+                              onClick={(event) => { event.stopPropagation(); copyContact(row._id, row.contact); }}
+                              className="shrink-0 text-slate-400 opacity-0 transition-opacity hover:text-violet-600 group-hover:opacity-100"
+                              aria-label="Copy contact"
+                            >
+                              {copiedId === row._id ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+                            </button>
+                          </div>
+                          {row.whatsappConsent && (
+                            <div className="mt-0.5 text-[9px] font-semibold text-emerald-600">WhatsApp opt-in</div>
+                          )}
+                        </td>
+                        <td className="whitespace-nowrap px-2.5 py-2 text-[10px] font-bold">{row.size || '—'}</td>
+                        <td className="whitespace-nowrap px-2.5 py-2">
+                          <Badge className={`rounded-full px-2 py-0 text-[8px] font-extrabold uppercase tracking-wider ${row.notified ? 'bg-emerald-500 text-white' : 'bg-amber-500 text-slate-950'}`}>
+                            {row.notified ? 'Notified' : 'Pending'}
+                          </Badge>
+                        </td>
+                        <td className="whitespace-nowrap px-2.5 py-2 text-[10px] text-muted-foreground">{timeAgo(row.createdAt)}</td>
+                        <td className="whitespace-nowrap px-2 py-2 text-right">
+                          <RowButtons
+                            onDetails={(event) => { event.stopPropagation(); openDetail(row, 'stock'); }}
+                            onOpen={(event) => { event.stopPropagation(); product?._id && router.push(`/admin/products/${product._id}`); }}
+                            onRemove={(event) => {
+                              event.stopPropagation();
+                              setPendingDelete({ kind: 'stock', id: row._id, name: product?.name || row.productName || 'this request' });
+                            }}
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  filteredPrice.map((row) => {
+                    const product = normalizeProduct(row.productId);
+                    const current = product?.price || 0;
+                    const ContactIcon = contactIcon(row.contactType);
+                    return (
+                      <tr
+                        key={row._id}
+                        onClick={() => openDetail(row, 'price')}
+                        tabIndex={0}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            openDetail(row, 'price');
+                          }
+                        }}
+                        className="group cursor-pointer transition-colors hover:bg-amber-500/[0.05] focus:bg-amber-500/[0.07] focus:outline-none"
+                      >
+                        <td className="max-w-[240px] px-2.5 py-2">
+                          <div className="flex items-center gap-2">
+                            <ProductThumb images={product?.images} name={product?.name} className="h-8 w-8" />
+                            <div className="min-w-0">
+                              <div className="truncate text-[11px] font-bold">{product?.name || row.productName || 'Unknown product'}</div>
+                              <div className="truncate font-mono text-[9px] text-muted-foreground">{product?.sku || 'No SKU'}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="whitespace-nowrap px-2.5 py-2 text-[11px] font-bold">{current ? formatPrice(current) : '—'}</td>
+                        <td className="whitespace-nowrap px-2.5 py-2 text-[11px] font-black text-amber-600">{formatPrice(row.targetPrice)}</td>
+                        <td className="whitespace-nowrap px-2.5 py-2">
+                          {current < row.targetPrice ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-emerald-600">
+                              <TrendingDown className="h-3 w-3" /> Reached
+                            </span>
+                          ) : current === row.targetPrice ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-600">
+                              <Clock className="h-3 w-3" /> At target
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-muted-foreground">
+                              <ArrowUpRight className="h-3 w-3" /> {formatPrice(current - row.targetPrice)} away
+                            </span>
+                          )}
+                        </td>
+                        <td className="max-w-[180px] px-2.5 py-2">
+                          <div className="flex items-center gap-1">
+                            <ContactIcon className="h-3 w-3 shrink-0 text-slate-400" />
+                            <span className="truncate text-[10px] font-medium">{row.contact || 'in-app only'}</span>
+                            {row.contact && (
+                              <button
+                                type="button"
+                                onClick={(event) => { event.stopPropagation(); copyContact(row._id, row.contact); }}
+                                className="shrink-0 text-slate-400 opacity-0 transition-opacity hover:text-amber-600 group-hover:opacity-100"
+                                aria-label="Copy contact"
+                              >
+                                {copiedId === row._id ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                        <td className="whitespace-nowrap px-2.5 py-2">
+                          <Badge className={`rounded-full px-2 py-0 text-[8px] font-extrabold uppercase tracking-wider ${row.active ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200'}`}>
+                            {row.active ? 'Active' : 'Inactive'}
+                          </Badge>
+                        </td>
+                        <td className="whitespace-nowrap px-2.5 py-2 text-[10px] text-muted-foreground">{timeAgo(row.createdAt)}</td>
+                        <td className="whitespace-nowrap px-2 py-2 text-right">
+                          <RowButtons
+                            onDetails={(event) => { event.stopPropagation(); openDetail(row, 'price'); }}
+                            onOpen={(event) => { event.stopPropagation(); product?._id && router.push(`/admin/products/${product._id}`); }}
+                            onRemove={(event) => {
+                              event.stopPropagation();
+                              setPendingDelete({ kind: 'price', id: row._id, name: product?.name || row.productName || 'this alert' });
+                            }}
+                            removeDisabled={!row.active}
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Footer */}
+          <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-slate-100 px-2.5 py-1.5 dark:border-slate-800">
+            <div className="flex items-center gap-1 text-[9px] font-medium text-muted-foreground">
+              <Clock className="h-2.5 w-2.5" />
+              {refreshedAt ? `Updated ${timeAgo(refreshedAt.toISOString())}` : 'Syncing…'}
+            </div>
+            <div className="ml-auto flex items-center gap-1 text-[9px] font-medium text-muted-foreground">
+              <Sparkles className="h-2.5 w-2.5 text-violet-500" />
+              Click any row for the full stock dossier
+              <ChevronRight className="h-2.5 w-2.5" />
+            </div>
+          </div>
+        </div>
+
+        {/* Insight rail */}
+        <aside className="space-y-2.5">
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-card shadow-sm dark:border-slate-800">
+            <div className="flex items-center gap-1.5 border-b border-slate-100 px-2.5 py-2 dark:border-slate-800">
+              {tab === 'stock' ? <BellRing className="h-3.5 w-3.5 text-violet-500" /> : <Tag className="h-3.5 w-3.5 text-amber-500" />}
+              <h2 className="text-[11px] font-extrabold tracking-tight">{tab === 'stock' ? 'Top demand' : 'Most watched'}</h2>
+              <span className="ml-auto text-[9px] font-semibold text-muted-foreground">Top 5</span>
+            </div>
+            <div className="p-2">
+              {topProducts.length === 0 ? (
+                <p className="px-1 py-4 text-center text-[10px] text-muted-foreground">No products to rank yet.</p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {topProducts.map((item) => {
+                    const max = topProducts[0]?.count || 1;
+                    const canOpen = Boolean(item.id);
+                    return (
+                      <li key={`${item.id}-${item.name}`}>
+                        <button
+                          type="button"
+                          disabled={!canOpen}
+                          onClick={() => {
+                            if (!canOpen) return;
+                            const row = tab === 'stock'
+                              ? filteredStock.find((candidate) => normalizeProduct(candidate.productId)?._id === item.id)
+                              : filteredPrice.find((candidate) => normalizeProduct(candidate.productId)?._id === item.id);
+                            if (row) openDetail(row, tab);
+                          }}
+                          className="group flex w-full items-center gap-2 rounded-lg px-1 py-1 text-left transition-colors enabled:hover:bg-muted/60 disabled:cursor-default"
+                        >
+                          <ProductThumb images={item.product?.images} name={item.name} className="h-7 w-7" />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-baseline justify-between gap-2">
+                              <span className="truncate text-[10px] font-bold group-hover:text-violet-700 dark:group-hover:text-violet-300">{item.name}</span>
+                              <span className="shrink-0 text-[10px] font-black text-violet-600">{item.count}</span>
+                            </div>
+                            <div className="mt-1 h-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                              <div
+                                className={`h-full rounded-full ${tab === 'stock' ? 'bg-violet-500' : 'bg-amber-500'}`}
+                                style={{ width: `${Math.max(8, Math.round((item.count / max) * 100))}%` }}
+                              />
+                            </div>
+                          </div>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          </div>
+
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-card shadow-sm dark:border-slate-800">
+            <div className="flex items-center gap-1.5 border-b border-slate-100 px-2.5 py-2 dark:border-slate-800">
+              <MessageCircle className="h-3.5 w-3.5 text-emerald-500" />
+              <h2 className="text-[11px] font-extrabold tracking-tight">{tab === 'stock' ? 'Channel mix' : 'Price watch'}</h2>
+            </div>
+            <div className="space-y-2 p-2.5">
+              {tab === 'stock' ? (
+                <>
+                  <ChannelRow label="Email" value={stats.email} total={stats.total} bar="bg-sky-500" icon={Mail} />
+                  <ChannelRow label="Phone" value={stats.phone} total={stats.total} bar="bg-violet-500" icon={Phone} />
+                  <ChannelRow label="WhatsApp" value={stats.whatsapp} total={stats.total} bar="bg-emerald-500" icon={MessageCircle} />
+                </>
+              ) : (
+                <>
+                  <RailStat label="Active alerts" value={`${activePriceAlerts} / ${priceAlerts.length}`} />
+                  <RailStat
+                    label="Reached target"
+                    value={`${priceAlerts.filter((row) => row.active && (normalizeProduct(row.productId)?.price || 0) <= row.targetPrice).length}`}
+                    tone="text-emerald-600"
+                  />
+                  <RailStat
+                    label="Avg. target"
+                    value={priceAlerts.length
+                      ? formatPrice(Math.round(priceAlerts.reduce((sum, row) => sum + row.targetPrice, 0) / priceAlerts.length))
+                      : '—'}
+                  />
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-violet-200/60 bg-gradient-to-br from-violet-50 to-fuchsia-50/60 p-2.5 dark:border-violet-900/60 dark:from-violet-950/30 dark:to-fuchsia-950/20">
+            <div className="flex items-center gap-1.5">
+              <Sparkles className="h-3.5 w-3.5 text-violet-500" />
+              <h2 className="text-[11px] font-extrabold tracking-tight">Restock playbook</h2>
+            </div>
+            <p className="mt-1 text-[10px] leading-snug text-muted-foreground">
+              When stock lands, back-in-stock contacts are emailed, WhatsApp-ed (if opted in) and notified in-app automatically. Open a row to audit the full ledger first.
+            </p>
+            <Link
+              href="/admin/inventory/stock"
+              className="mt-2 inline-flex items-center gap-1 rounded-lg bg-violet-600 px-2 py-1 text-[9px] font-extrabold uppercase tracking-wider text-white transition-colors hover:bg-violet-700"
+            >
+              <Boxes className="h-2.5 w-2.5" /> Adjust stock
+              <ChevronRight className="h-2.5 w-2.5" />
+            </Link>
+          </div>
+        </aside>
+      </div>
+
+      <ProductStockDialog
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+        productId={detail?.productId || null}
+        fallback={detail?.product || null}
+        context={detail?.context || null}
+      />
+
+      <ConfirmationModal
+        open={Boolean(pendingDelete)}
+        onOpenChange={(open) => { if (!open && !removing) setPendingDelete(null); }}
+        onConfirm={confirmRemove}
+        title={pendingDelete?.kind === 'stock' ? 'Remove stock alert?' : 'Deactivate price alert?'}
+        description={
+          pendingDelete?.kind === 'stock'
+            ? `The pending back-in-stock request for "${pendingDelete?.name}" will be deleted. This cannot be undone.`
+            : `The price alert for "${pendingDelete?.name}" will be switched off for this subscriber.`
+        }
+        confirmText={pendingDelete?.kind === 'stock' ? 'Remove alert' : 'Deactivate'}
+        variant={pendingDelete?.kind === 'stock' ? 'destructive' : 'default'}
+        isLoading={removing}
+      />
+    </div>
+  );
+}
+
+// =====================================================
+// SMALL PIECES
+// =====================================================
+
+function RowButtons({
+  onDetails,
+  onOpen,
+  onRemove,
+  removeDisabled,
+}: {
+  onDetails: (event: ReactMouseEvent) => void;
+  onOpen: (event: ReactMouseEvent) => void;
+  onRemove: (event: ReactMouseEvent) => void;
+  removeDisabled?: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-end gap-0.5">
+      <button
+        type="button"
+        onClick={onDetails}
+        className="flex h-6 w-6 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-violet-500/10 hover:text-violet-600"
+        aria-label="Open stock details"
+        title="Stock details"
+      >
+        <Eye className="h-3.5 w-3.5" />
+      </button>
+      <button
+        type="button"
+        onClick={onOpen}
+        className="flex h-6 w-6 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-500/10 hover:text-slate-700 dark:hover:text-slate-200"
+        aria-label="Open product"
+        title="Open product"
+      >
+        <ExternalLink className="h-3.5 w-3.5" />
+      </button>
+      <button
+        type="button"
+        onClick={onRemove}
+        disabled={removeDisabled}
+        className="flex h-6 w-6 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-rose-500/10 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-30"
+        aria-label="Remove alert"
+        title={removeDisabled ? 'Already inactive' : 'Remove alert'}
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+}
+
+function ChannelRow({
+  label,
+  value,
+  total,
+  bar,
+  icon: Icon,
+}: {
+  label: string;
+  value: number;
+  total: number;
+  bar: string;
+  icon: any;
+}) {
+  const pct = total > 0 ? Math.round((value / total) * 100) : 0;
+  return (
+    <div>
+      <div className="flex items-center gap-1.5">
+        <Icon className="h-2.5 w-2.5 text-muted-foreground" />
+        <span className="text-[9px] font-bold text-muted-foreground">{label}</span>
+        <span className="ml-auto text-[10px] font-black">{value}</span>
+        <span className="w-7 text-right text-[9px] font-semibold text-muted-foreground">{pct}%</span>
+      </div>
+      <div className="mt-1 h-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+        <div className={`h-full rounded-full ${bar}`} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function RailStat({ label, value, tone = '' }: { label: string; value: string; tone?: string }) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">{label}</span>
+      <span className={`text-[11px] font-black ${tone}`}>{value}</span>
     </div>
   );
 }

@@ -3,15 +3,26 @@ import validator from 'validator';
 import { CustomError } from './errorHandler';
 
 // Input sanitization middleware
+//
+// IMPORTANT: we deliberately do NOT HTML-escape strings here. Running
+// `validator.escape` on input corrupts the data that gets persisted: image
+// URLs turn into "http:&#x2F;&#x2F;...", apostrophes in descriptions render
+// literally ("don&#x27;t"), and search terms get mangled. Escaping belongs at
+// render time, where React already escapes text safely.
+//
+// This middleware only trims surrounding whitespace and strips control
+// characters, which is enough to keep stored values clean.
 export const sanitizeInput = (
   req: Request,
   _res: Response,
   next: NextFunction
 ): void => {
-  // Sanitize string inputs recursively
+  // eslint-disable-next-line no-control-regex
+  const CONTROL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
+
   const sanitizeObject = (obj: any): any => {
     if (typeof obj === 'string') {
-      return validator.escape(validator.trim(obj));
+      return validator.trim(obj).replace(CONTROL_CHARS, '');
     }
     if (Array.isArray(obj)) {
       return obj.map(sanitizeObject);

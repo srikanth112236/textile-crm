@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import Joi from 'joi';
 import mongoose from 'mongoose';
 import { Order, IOrder, OrderStatus, PaymentStatus } from '../models/Order';
+import { ReturnRequest } from '../models/ReturnRequest';
 import { Cart } from '../models/Cart';
 import { Product } from '../models/Product';
 import { User, IAddress } from '../models/User';
@@ -12,6 +13,64 @@ import { validateDiscount } from './discountController';
 import { awardPointsForOrder, revokePointsForOrder } from './loyaltyController';
 import { runSafeTransaction } from '../utils/safeSession';
 import { requireCustomer } from '../utils/requireCustomer';
+import { getShippingQuote, toPackageLine, type PackageLine, type ShippingQuote } from '../services/shippingPricing';
+import {
+  RefundError,
+  createOrderRefund,
+  completeManualRefund as completeManualRefundService,
+} from '../services/refunds';
+
+type ShippingCalculation =
+  | { ok: true; quote: ShippingQuote; codBalance: number }
+  | { ok: false; error: string };
+
+/**
+ * Authoritative shipping + COD calculation used by both the logged-in and
+ * guest checkout paths. Never trust a client-supplied amount: the same
+ * function powers the checkout quote endpoint, so display and charge match.
+ */
+async function calculateShippingForOrder(opts: {
+  lines: PackageLine[];
+  zip: string;
+  paymentMethod: string;
+  finalTotal: number;
+  freeShipCoupon: boolean;
+  userId?: string;
+}): Promise<ShippingCalculation> {
+  try {
+    const { Settings } = await import('../models/Settings');
+    const settings = await Settings.findOne({ key: 'global' });
+
+    const quote = await getShippingQuote({
+      lines: opts.lines,
+      deliveryPincode: opts.zip,
+      paymentMethod: opts.paymentMethod,
+      orderValue: opts.finalTotal,
+      freeShipCoupon: opts.freeShipCoupon,
+      settings: settings as any,
+    });
+
+    if (!quote.available) {
+      return { ok: false, error: quote.reason || 'Delivery is not available to this PIN right now.' };
+    }
+
+    let codBalance = 0;
+    if ((opts.paymentMethod || '').toLowerCase() === 'cod' && (settings as any)?.payments?.codEnabled) {
+      const { getCODQuoteDetailed } = await import('../services/codRules');
+      const cod = await getCODQuoteDetailed(opts.finalTotal + quote.charge, {
+        pincode: opts.zip,
+        userId: opts.userId,
+      });
+      if (!cod.codAllowed) return { ok: false, error: cod.reason };
+      codBalance = cod.balance;
+    }
+
+    return { ok: true, quote, codBalance };
+  } catch (err: any) {
+    console.error('Order shipping calculation failed:', err?.response?.data || err?.message);
+    return { ok: false, error: 'Could not calculate shipping. Please try again.' };
+  }
+}
 
 /**
  * Fire-and-forget auto-push to Shiprocket once admin confirms an order.
@@ -93,6 +152,20 @@ const createOrderSchema = Joi.object({
     zip: Joi.string().trim().required().max(20),
     country: Joi.string().trim().required().max(100),
   }).optional(),
+  // Express checkout: buy selected variant(s) directly without touching the cart.
+  items: Joi.array()
+    .items(
+      Joi.object({
+        productId: Joi.string().regex(/^[0-9a-fA-F]{24}$/).required(),
+        quantity: Joi.number().integer().min(1).max(10).required(),
+        variations: Joi.array()
+          .items(Joi.object({ name: Joi.string().required(), value: Joi.string().required() }))
+          .optional(),
+      })
+    )
+    .min(1)
+    .max(20)
+    .optional(),
   paymentMethod: Joi.string().trim().valid('manual', 'razorpay', 'cod', 'upi', 'card', 'netbanking', 'wallet').default('manual'),
   discountCode: Joi.string().trim().uppercase().optional().allow(''),
   loyaltyPointsRedeemed: Joi.number().integer().min(0).optional(),
@@ -120,11 +193,63 @@ const refundOrderSchema = Joi.object({
 });
 
 export { UPI_RE, IFSC_RE, isValidUpiId, isValidBankDestination } from '../utils/refundValidation';
-import { UPI_RE as UPI_PATTERN, IFSC_RE as IFSC_PATTERN } from '../utils/refundValidation';
 
 const cancelOrderSchema = Joi.object({
   reason: Joi.string().trim().max(500).optional(),
 });
+
+// Resolve the SKU price for the selected variant attributes (Size, Color…).
+function resolveVariantPrice(product: any, variations?: Array<{ name: string; value: string }>): number {
+  const base = Number(product.price) || 0;
+  if (!variations || variations.length === 0) return base;
+  const skus: any[] = (product.variantSKUs || []).filter((s: any) => s.isEnabled !== false);
+  if (skus.length === 0) return base;
+  const wanted = variations.map((v) => ({
+    name: String(v.name).toLowerCase(),
+    value: String(v.value).toLowerCase(),
+  }));
+  const match = skus.find((sku) => {
+    const raw = sku.attributes;
+    const attrs: Record<string, string> = raw instanceof Map ? Object.fromEntries(raw) : raw || {};
+    const normalized = Object.entries(attrs).map(([k, v]) => ({
+      name: String(k).toLowerCase(),
+      value: String(v).toLowerCase(),
+    }));
+    return wanted.every((w) => normalized.some((n) => n.name === w.name && n.value === w.value));
+  });
+  return Number(match?.price) > 0 ? Number(match.price) : base;
+}
+
+// Save a shipping address on the customer profile as the default one so the
+// next order can use express checkout.
+function sameAddress(a: any, b: any): boolean {
+  const norm = (v: any) => String(v || '').trim().toLowerCase();
+  return (
+    norm(a.street) === norm(b.street) &&
+    norm(a.city) === norm(b.city) &&
+    norm(a.state) === norm(b.state) &&
+    norm(a.zip) === norm(b.zip) &&
+    norm(a.country) === norm(b.country)
+  );
+}
+
+function ensureDefaultAddress(user: any, address: any): boolean {
+  if (!user || !address) return false;
+  const existing = user.addresses.find((a: any) => sameAddress(a, address));
+  let changed = false;
+  if (existing) {
+    if (!existing.isDefault) {
+      user.addresses.forEach((a: any) => { a.isDefault = false; });
+      existing.isDefault = true;
+      changed = true;
+    }
+  } else {
+    user.addresses.forEach((a: any) => { a.isDefault = false; });
+    user.addresses.push({ ...address, isDefault: true });
+    changed = true;
+  }
+  return changed;
+}
 
 /**
  * Get user orders
@@ -206,7 +331,7 @@ export const getOrder = async (req: Request, res: Response): Promise<void> => {
 
     // Now populate the order with all needed fields
     const populatedOrder = await Order.findById(id)
-      .populate('items.productId', 'name images sku description price')
+      .populate('items.productId', 'name images sku description shortDescription price compareAtPrice slug stock status')
       .populate('userId', 'name email phone')
       .lean();
 
@@ -251,11 +376,17 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
     }
 
     await runSafeTransaction(async (session) => {
-      // Get user cart
-      const cart = await Cart.findOne({ userId }).session(session || null);
-      if (!cart || !cart.items || cart.items.length === 0) {
-        res.status(400).json({ error: 'Cart is empty' });
-        return;
+      // Express checkout buys the selected variant directly and leaves the
+      // shopper's cart untouched. Normal checkout still uses the cart.
+      const directItems: any[] | null =
+        Array.isArray(value.items) && value.items.length > 0 ? value.items : null;
+      let cart: any = null;
+      if (!directItems) {
+        cart = await Cart.findOne({ userId }).session(session || null);
+        if (!cart || !cart.items || cart.items.length === 0) {
+          res.status(400).json({ error: 'Cart is empty' });
+          return;
+        }
       }
 
       // Get shipping address
@@ -296,11 +427,31 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
         };
       }
 
+      // Persist the address as the customer's default so the next purchase can
+      // use express checkout without re-entering it.
+      if (ensureDefaultAddress(user, shippingAddress)) {
+        await user.save({ session });
+      }
+
       // Validate and prepare order items
-      const orderItems = [];
+      const orderItems: any[] = [];
+      const packageLines: PackageLine[] = [];
       let total = 0;
 
-      for (const cartItem of cart.items) {
+      const sourceItems: any[] = directItems
+        ? directItems.map((it: any) => ({
+            productId: it.productId,
+            quantity: it.quantity,
+            variations: it.variations || [],
+          }))
+        : cart.items.map((it: any) => ({
+            productId: it.productId,
+            quantity: it.quantity,
+            variations: it.variations || [],
+            price: it.price,
+          }));
+
+      for (const cartItem of sourceItems) {
         const product = await Product.findById(cartItem.productId).session(session || null);
         if (!product) {
           res.status(404).json({ error: `Product ${cartItem.productId} not found` });
@@ -312,8 +463,11 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
           return;
         }
 
+        // Parcel line for the live courier quote (weight/dimensions).
+        packageLines.push(toPackageLine(product, cartItem.quantity));
+
         // Price snapshot (stock validated + decremented below at size level)
-        const itemPrice = cartItem.price || product.price;
+        const itemPrice = cartItem.price || resolveVariantPrice(product, cartItem.variations) || product.price;
         const subtotal = itemPrice * cartItem.quantity;
         total += subtotal;
 
@@ -376,31 +530,21 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
       const finalTotal = Math.max(0, total - discountAmount - loyaltyDiscountAmount);
       const orderNumber = await generateOrderNumber(session);
 
-      // Phase 0/1 + E: shipping cost + smart COD advance/balance from Settings
-      let shippingCost = 0;
-      let codBalance = 0;
-      try {
-        const { Settings } = await import('../models/Settings');
-        const { getCODQuoteDetailed } = await import('../services/codRules');
-        const settings = await Settings.findOne({ key: 'global' });
-        if (settings) {
-          const threshold = settings.shipping.freeShippingThreshold ?? 999;
-          shippingCost = freeShipCoupon ? 0 : (finalTotal >= threshold ? 0 : (settings.shipping.flatShippingCost ?? 49));
-          if ((value.paymentMethod || 'manual') === 'cod' && settings.payments.codEnabled) {
-            const quote = await getCODQuoteDetailed(finalTotal + shippingCost, {
-              pincode: shippingAddress.zip,
-              userId,
-            });
-            if (!quote.codAllowed) {
-              res.status(400).json({ error: quote.reason });
-              return;
-            }
-            codBalance = quote.balance;
-          }
-        }
-      } catch {
-        // settings optional — fall through with zero shipping
+      // Live courier rate (Shiprocket) + COD advance/balance
+      const shipping = await calculateShippingForOrder({
+        lines: packageLines,
+        zip: shippingAddress.zip,
+        paymentMethod: value.paymentMethod || 'manual',
+        finalTotal,
+        freeShipCoupon,
+        userId: userId.toString(),
+      });
+      if (!shipping.ok) {
+        res.status(400).json({ error: shipping.error });
+        return;
       }
+      const shippingCost = shipping.quote.charge;
+      const codBalance = shipping.codBalance;
 
       const order = new Order({
         userId,
@@ -411,6 +555,15 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
         discountAmount,
         discountCode: value.discountCode ? String(value.discountCode).toUpperCase() : undefined,
         shippingCost,
+        shippingCourier: shipping.quote.courierName,
+        shippingEtd: shipping.quote.estimatedDays || shipping.quote.etd,
+        shippingRateSource: shipping.quote.source,
+        shippingActualCost: shipping.quote.actualCost,
+        shippingQuotedAt: new Date(shipping.quote.quotedAt),
+        packageWeightG: shipping.quote.weightG,
+        packageLengthCm: shipping.quote.lengthCm,
+        packageWidthCm: shipping.quote.widthCm,
+        packageHeightCm: shipping.quote.heightCm,
         shippingAddress: {
           street: shippingAddress.street,
           city: shippingAddress.city,
@@ -423,10 +576,11 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
         paymentMethod: value.paymentMethod || 'manual',
         codAdvancePaid: 0,
         codBalance,
+        ...(directItems ? { source: 'express-checkout' } : {}),
       } as any);
 
       await order.save({ session });
-      await clearCart(userId);
+      if (!directItems) await clearCart(userId);
 
       const populatedOrder = await Order.findById(order._id)
         .populate('items.productId', 'name images sku')
@@ -533,8 +687,15 @@ export const createGuestOrder = async (req: Request, res: Response): Promise<voi
       }
       const userId = (user as any)._id.toString();
 
+      // Keep the address on the auto-created account as the default so a later
+      // OTP login can use express checkout.
+      if (ensureDefaultAddress(user, value.shippingAddress)) {
+        await user.save({ session });
+      }
+
       // Validate items + decrement stock
       const orderItems = [];
+      const packageLines: PackageLine[] = [];
       let total = 0;
       for (const it of value.items) {
         const product = await Product.findById(it.productId).session(session || null);
@@ -550,13 +711,15 @@ export const createGuestOrder = async (req: Request, res: Response): Promise<voi
           res.status(400).json({ error: `Insufficient stock for ${product.name}. Available: ${product.stock}` });
           return;
         }
-        const subtotal = product.price * it.quantity;
+        packageLines.push(toPackageLine(product, it.quantity));
+        const variantPrice = resolveVariantPrice(product, it.variations);
+        const subtotal = variantPrice * it.quantity;
         total += subtotal;
         orderItems.push({
           productId: it.productId,
           quantity: it.quantity,
           variations: it.variations || [],
-          price: product.price,
+          price: variantPrice,
           subtotal,
         });
         // Decrement size-level stock (see logged-in flow).
@@ -588,28 +751,20 @@ export const createGuestOrder = async (req: Request, res: Response): Promise<voi
       const finalTotal = Math.max(0, total - discountAmount);
       const orderNumber = await generateOrderNumber(session);
 
-      let shippingCost = 0;
-      let codBalance = 0;
-      try {
-        const { Settings } = await import('../models/Settings');
-        const { getCODQuoteDetailed } = await import('../services/codRules');
-        const settings = await Settings.findOne({ key: 'global' });
-        if (settings) {
-          const threshold = settings.shipping.freeShippingThreshold ?? 999;
-          shippingCost = freeShipCoupon ? 0 : (finalTotal >= threshold ? 0 : (settings.shipping.flatShippingCost ?? 49));
-          if (value.paymentMethod === 'cod' && settings.payments.codEnabled) {
-            const quote = await getCODQuoteDetailed(finalTotal + shippingCost, {
-              pincode: value.shippingAddress.zip,
-              userId,
-            });
-            if (!quote.codAllowed) {
-              res.status(400).json({ error: quote.reason });
-              return;
-            }
-            codBalance = quote.balance;
-          }
-        }
-      } catch { /* settings optional */ }
+      const shipping = await calculateShippingForOrder({
+        lines: packageLines,
+        zip: value.shippingAddress.zip,
+        paymentMethod: value.paymentMethod || 'cod',
+        finalTotal,
+        freeShipCoupon,
+        userId,
+      });
+      if (!shipping.ok) {
+        res.status(400).json({ error: shipping.error });
+        return;
+      }
+      const shippingCost = shipping.quote.charge;
+      const codBalance = shipping.codBalance;
 
       const order = new Order({
         userId,
@@ -620,6 +775,15 @@ export const createGuestOrder = async (req: Request, res: Response): Promise<voi
         discountAmount,
         discountCode: value.discountCode ? String(value.discountCode).toUpperCase() : undefined,
         shippingCost,
+        shippingCourier: shipping.quote.courierName,
+        shippingEtd: shipping.quote.estimatedDays || shipping.quote.etd,
+        shippingRateSource: shipping.quote.source,
+        shippingActualCost: shipping.quote.actualCost,
+        shippingQuotedAt: new Date(shipping.quote.quotedAt),
+        packageWeightG: shipping.quote.weightG,
+        packageLengthCm: shipping.quote.lengthCm,
+        packageWidthCm: shipping.quote.widthCm,
+        packageHeightCm: shipping.quote.heightCm,
         shippingAddress: {
           street: value.shippingAddress.street,
           city: value.shippingAddress.city,
@@ -864,16 +1028,15 @@ export const confirmPayment = async (req: Request, res: Response): Promise<void>
 
 /**
  * Refund order (Admin/Superadmin only)
+ *
+ * Delegates to the refund ledger service. The service is responsible for
+ * capping the amount at money actually collected, preventing duplicate
+ * in-flight refunds, routing online money through Razorpay, and keeping the
+ * order/payment aggregates in sync.
  */
 export const refundOrder = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { id } = req.params;
-
-    // Validate input
-    const { error, value } = refundOrderSchema.validate(req.body, {
-      abortEarly: false,
-    });
-
+    const { error, value } = refundOrderSchema.validate(req.body, { abortEarly: false });
     if (error) {
       res.status(400).json({
         error: 'Validation error',
@@ -882,201 +1045,36 @@ export const refundOrder = async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
-    const order = await Order.findById(id).populate('userId', 'name email phone');
-    if (!order) {
-      res.status(404).json({ error: 'Order not found' });
-      return;
-    }
-
-    if (order.paymentStatus === PaymentStatus.REFUNDED) {
-      res.status(400).json({ error: 'Order already refunded' });
-      return;
-    }
-
-    const refundAmount = value.refundAmount || order.total;
-
-    if (refundAmount > order.total) {
-      res.status(400).json({ error: 'Refund amount cannot exceed order total' });
-      return;
-    }
-
-    // Destination rules: online money always returns to source (Razorpay rule —
-    // no UPI/bank details needed). Manual settlements require a destination.
-    const hasOnlineMoney = Boolean((order as any).razorpayPaymentId);
-    const refundMethod = hasOnlineMoney ? 'source' : value.refundMethod || 'source';
-    if (refundMethod === 'upi' && !UPI_PATTERN.test(value.upiId || '')) {
-      res.status(400).json({ error: 'Enter a valid UPI ID (e.g. name@okbank)' });
-      return;
-    }
-    if (
-      refundMethod === 'bank' &&
-      (!value.bankAccountName || !value.bankAccountNumber || !IFSC_PATTERN.test(value.bankIfsc || ''))
-    ) {
-      res.status(400).json({ error: 'Bank account name, number and valid IFSC are required for bank refunds' });
-      return;
-    }
-
-    // Route online money through Razorpay FIRST — before touching local state.
-    // If Razorpay fails the order is left untouched so the admin can retry.
-    // COD / manual orders (no razorpayPaymentId) refund locally.
-    let razorpayRefundId: string | null = null;
-    let refundMode: 'razorpay' | 'manual' = 'manual';
-    const rpPaymentId = (order as any).razorpayPaymentId;
-    if (rpPaymentId && refundAmount > 0) {
-      try {
-        const { refundRazorpayPayment } = await import('../services/razorpay');
-        const rf: any = await refundRazorpayPayment(rpPaymentId, refundAmount);
-        razorpayRefundId = String(rf.id || rf.refund_id || '');
-        refundMode = 'razorpay';
-      } catch (e: any) {
-        console.error('Razorpay refund failed:', e.response?.data || e.message);
-        res.status(502).json({
-          error: 'Razorpay refund failed — order NOT refunded, safe to retry',
-          details: e.response?.data || e.message,
-        });
-        return;
-      }
-    }
-
-    // DB writes run in a transaction on replica sets, plain writes on
-    // standalone Mongo (runSafeTransaction) — never crashes with
-    // "Transaction numbers are only allowed on a replica set member".
-    await runSafeTransaction(async (session) => {
-      const o = await Order.findById(id).session(session || null);
-      if (!o) throw new Error('ORDER_NOT_FOUND');
-      if (o.paymentStatus === PaymentStatus.REFUNDED) throw new Error('ALREADY_REFUNDED');
-
-      // Partial refunds keep the order alive; only full refunds close it.
-      const isPartial = refundAmount < o.total;
-      o.paymentStatus = isPartial ? PaymentStatus.PARTIALLY_REFUNDED : PaymentStatus.REFUNDED;
-      if (!isPartial) o.status = OrderStatus.REFUNDED;
-      o.refundAmount = refundAmount;
-      o.refundNotes = value.notes;
-      (o as any).refundMethod = refundMethod;
-      if (refundMethod === 'upi') {
-        (o as any).refundUpiId = value.upiId;
-        (o as any).refundBankName = undefined;
-        (o as any).refundBankAccount = undefined;
-        (o as any).refundBankIfsc = undefined;
-      } else if (refundMethod === 'bank') {
-        (o as any).refundBankName = value.bankAccountName;
-        (o as any).refundBankAccount = value.bankAccountNumber;
-        (o as any).refundBankIfsc = value.bankIfsc;
-        (o as any).refundUpiId = undefined;
-      }
-      if (razorpayRefundId) {
-        o.paymentNotes = `${o.paymentNotes || ''} Razorpay refund: ${razorpayRefundId}`.trim();
-        (o as any).refundStatus = 'completed';
-        (o as any).refundReference = razorpayRefundId;
-        (o as any).refundCompletedAt = new Date();
-        o.timeline.push({
-          event: refundMode === 'razorpay' ? 'Refund completed' : 'Refund initiated',
-          description: `₹${refundAmount} refunded to source via Razorpay (5–7 working days). Ref: ${razorpayRefundId}`.slice(0, 500),
-          type: 'payment',
-          metadata: { amount: refundAmount, mode: refundMode, reference: razorpayRefundId },
-          createdAt: new Date(),
-        } as any);
-      } else {
-        // Manual settlement — admin completes it after paying the customer.
-        (o as any).refundStatus = 'processing';
-        o.timeline.push({
-          event: 'Refund initiated',
-          description: `₹${refundAmount} manual refund via ${refundMethod === 'upi' ? `UPI ${value.upiId}` : `bank ${value.bankAccountNumber}`}. Completing after settlement.`.slice(0, 500),
-          type: 'payment',
-          metadata: { amount: refundAmount, mode: 'manual', method: refundMethod },
-          createdAt: new Date(),
-        } as any);
-      }
-
-      // Return size-level stock for refunded items — full refunds only.
-      if (!isPartial) {
-        const { restoreStockForOrder } = await import('../utils/stock');
-        for (const item of o.items) {
-          const product = await Product.findById(item.productId).session(session || null);
-          if (product) {
-            await restoreStockForOrder(product, item.variations, item.quantity, session);
-          }
-        }
-      }
-
-      await o.save({ session });
+    const result = await createOrderRefund({
+      orderId: req.params.id,
+      amount: value.refundAmount,
+      notes: value.notes,
+      destination: value.refundMethod,
+      upiId: value.upiId,
+      bankAccountName: value.bankAccountName,
+      bankAccountNumber: value.bankAccountNumber,
+      bankIfsc: value.bankIfsc,
+      adminId: req.user?.userId,
     });
 
-    const fresh = await Order.findById(id);
-
-    // userId may be populated (doc) or raw (ObjectId) — normalize once.
-    const userIdStr =
-      (order.userId as any)?._id?.toString?.() || order.userId?.toString?.() || '';
-
-    // Mirror the refund into the payment ledger (best-effort)
-    try {
-      const { Payment } = await import('../models/Payment');
-      const payment: any = rpPaymentId
-        ? await Payment.findOne({ razorpayPaymentId: rpPaymentId })
-        : await Payment.findOne({ orderId: id, status: 'captured' }).sort({ createdAt: -1 });
-      if (payment) {
-        if (razorpayRefundId) payment.refundId = razorpayRefundId;
-        payment.refundAmount = refundAmount;
-        payment.status = refundAmount < order.total ? 'partially_refunded' : 'refunded';
-        await payment.save().catch(() => {});
-      }
-    } catch { /* ledger optional */ }
-
-    // Revoke loyalty points if they were awarded
-    await revokePointsForOrder(order._id.toString(), userIdStr);
-
-    // Emit refund notification to user
-    emitToUser(userIdStr, 'orderRefunded', {
-      orderId: order._id.toString(),
-      orderNumber: order.orderNumber,
-      refundAmount,
-      refundMode,
-      timestamp: new Date(),
-    });
-
-    emitToUser(userIdStr, 'orderStatusUpdate', {
-      orderId: order._id.toString(),
-      orderNumber: order.orderNumber,
-      oldStatus: order.status,
-      newStatus: OrderStatus.REFUNDED,
-      timestamp: new Date(),
-    });
-
-    // WhatsApp: refund initiated/completed with ETA (fire-and-forget)
-    try {
-      const { notifyOrderWhatsApp } = await import('../services/whatsapp');
-      const buyerPhone = (order.userId as any)?.phone;
-      if (buyerPhone) {
-        if (refundMode === 'razorpay') {
-          notifyOrderWhatsApp(buyerPhone, 'refund_completed', { orderNumber: order.orderNumber, amount: `₹${refundAmount}` }).catch(() => {});
-        } else {
-          notifyOrderWhatsApp(buyerPhone, 'refund_initiated', { orderNumber: order.orderNumber, amount: `₹${refundAmount}` }).catch(() => {});
-        }
-      }
-    } catch { /* notifications optional */ }
+    const refund: any = result.refund;
+    const message =
+      result.mode === 'razorpay'
+        ? refund?.status === 'completed'
+          ? 'Refund processed via Razorpay'
+          : 'Refund submitted to Razorpay — tracking until processed'
+        : 'Manual refund recorded — mark it completed after settlement';
 
     res.status(200).json({
       success: true,
-      message:
-        refundMode === 'razorpay'
-          ? refundAmount < order.total
-            ? 'Partial refund processed via Razorpay'
-            : 'Order refunded successfully via Razorpay'
-          : refundAmount < order.total
-            ? 'Partial refund recorded (COD/manual — settle with customer)'
-            : 'Order refunded successfully (COD/manual — settle with customer)',
-      data: fresh,
-      refundMode,
-      refundMethod,
-      razorpayRefundId,
+      message,
+      data: await Order.findById(req.params.id),
+      refund,
+      refundMode: result.mode,
     });
   } catch (error: any) {
-    if (error.message === 'ORDER_NOT_FOUND') {
-      res.status(404).json({ error: 'Order not found' });
-      return;
-    }
-    if (error.message === 'ALREADY_REFUNDED') {
-      res.status(400).json({ error: 'Order already refunded' });
+    if (error instanceof RefundError) {
+      res.status(error.status).json({ error: error.message, details: error.details });
       return;
     }
     console.error('Refund order error:', error);
@@ -1086,12 +1084,10 @@ export const refundOrder = async (req: Request, res: Response): Promise<void> =>
 
 /**
  * Complete a manual refund (Admin/Superadmin only).
- * Marks a `processing` manual refund completed after paying the customer
- * via the stored UPI/bank destination. Requires a reference note (audit).
+ * Marks a processing manual payout completed after the money was sent.
  */
 export const completeManualRefund = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { id } = req.params;
     const schema = Joi.object({
       reference: Joi.string().trim().max(100).required(),
       notes: Joi.string().trim().max(500).optional().allow(''),
@@ -1101,51 +1097,26 @@ export const completeManualRefund = async (req: Request, res: Response): Promise
       res.status(400).json({ error: 'Validation error', details: error.details.map((d) => d.message) });
       return;
     }
-    const order = await Order.findById(id).populate('userId', 'name email phone');
-    if (!order) {
-      res.status(404).json({ error: 'Order not found' });
-      return;
-    }
-    if ((order as any).refundStatus !== 'processing') {
-      res.status(400).json({ error: 'Only refunds in processing state can be completed' });
-      return;
-    }
-    (order as any).refundStatus = 'completed';
-    (order as any).refundReference = value.reference;
-    (order as any).refundCompletedAt = new Date();
-    if (value.notes) order.refundNotes = value.notes;
-    const dest =
-      (order as any).refundMethod === 'upi'
-        ? `UPI ${(order as any).refundUpiId}`
-        : (order as any).refundMethod === 'bank'
-          ? `bank ${(order as any).refundBankAccount}`
-          : 'source';
-    order.timeline.push({
-      event: 'Refund completed',
-      description: `₹${(order as any).refundAmount} manual refund completed via ${dest}. Ref: ${value.reference}`.slice(0, 500),
-      type: 'payment',
-      metadata: { amount: (order as any).refundAmount, mode: 'manual', reference: value.reference },
-      createdAt: new Date(),
-    } as any);
-    await order.save();
-    const userIdStr = (order.userId as any)?._id?.toString?.() || order.userId?.toString?.() || '';
-    emitToUser(userIdStr, 'orderRefunded', {
-      orderId: order._id.toString(),
-      orderNumber: order.orderNumber,
-      refundAmount: (order as any).refundAmount,
-      refundMode: 'manual',
-      timestamp: new Date(),
+
+    const result = await completeManualRefundService({
+      orderId: req.params.id,
+      reference: value.reference,
+      notes: value.notes,
+      adminId: req.user?.userId,
     });
-    try {
-      const { notifyOrderWhatsApp } = await import('../services/whatsapp');
-      const buyerPhone = (order.userId as any)?.phone;
-      if (buyerPhone) {
-        notifyOrderWhatsApp(buyerPhone, 'refund_completed', { orderNumber: order.orderNumber, amount: `₹${(order as any).refundAmount}` }).catch(() => {});
-      }
-    } catch { /* notifications optional */ }
-    res.status(200).json({ success: true, message: 'Manual refund marked completed', data: order });
-  } catch (err) {
-    console.error('Complete refund error:', err);
+
+    res.status(200).json({
+      success: true,
+      message: result.alreadyCompleted ? 'Refund already completed' : 'Manual refund marked completed',
+      data: result.order || (await Order.findById(req.params.id)),
+      refund: result.refund,
+    });
+  } catch (error: any) {
+    if (error instanceof RefundError) {
+      res.status(error.status).json({ error: error.message, details: error.details });
+      return;
+    }
+    console.error('Complete refund error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -1519,10 +1490,22 @@ export const getAllOrders = async (req: Request, res: Response): Promise<void> =
       query.isArchived = isArchived === 'true';
     }
     if (search) {
+      const safe = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const rx = { $regex: safe, $options: 'i' };
+      // Customers search by name/email/phone too, not just order numbers.
+      const matchedUsers = await User.find({
+        $or: [{ name: rx }, { email: rx }, { phone: rx }],
+      })
+        .select('_id')
+        .limit(500)
+        .lean();
+      const userIds = matchedUsers.map((u) => u._id);
       query.$or = [
-        { orderNumber: { $regex: search, $options: 'i' } },
-        { trackingNumber: { $regex: search, $options: 'i' } },
-        { internalReference: { $regex: search, $options: 'i' } },
+        { orderNumber: rx },
+        { trackingNumber: rx },
+        { shiprocketAWB: rx },
+        { internalReference: rx },
+        ...(userIds.length ? [{ userId: { $in: userIds } }] : []),
       ];
     }
 
@@ -1558,6 +1541,44 @@ export const getAllOrders = async (req: Request, res: Response): Promise<void> =
 // =====================================================
 // PHASE 9: ORDER MANAGEMENT ENHANCEMENTS
 // =====================================================
+
+/**
+ * Lightweight counters for the admin sidebar + orders tabs.
+ * Counts are global (independent of the current filters) so the badges always
+ * match the number of orders a tab will show.
+ */
+export const getOrderStats = async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const [statusRows, paymentRows, returnsRows, total, returnsTotal] = await Promise.all([
+      Order.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
+      Order.aggregate([{ $group: { _id: '$paymentStatus', count: { $sum: 1 } } }]),
+      ReturnRequest.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
+      Order.countDocuments({}),
+      ReturnRequest.countDocuments({}),
+    ]);
+
+    const toMap = (rows: Array<{ _id: string | null; count: number }>): Record<string, number> => {
+      const out: Record<string, number> = {};
+      rows.forEach((row) => {
+        if (row._id) out[row._id] = row.count;
+      });
+      return out;
+    };
+
+    res.status(200).json({
+      success: true,
+      data: {
+        total,
+        byStatus: toMap(statusRows),
+        byPaymentStatus: toMap(paymentRows),
+        returns: { total: returnsTotal, byStatus: toMap(returnsRows) },
+      },
+    });
+  } catch (error: any) {
+    console.error('Get order stats error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
 
 const addOrderNoteSchema = Joi.object({
   content: Joi.string().trim().required().max(2000),

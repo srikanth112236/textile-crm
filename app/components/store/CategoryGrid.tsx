@@ -124,7 +124,7 @@ export function CategoryGrid({ categories }: CategoryGridProps) {
               <div className="relative w-28 h-28 sm:w-36 sm:h-36 rounded-2xl overflow-hidden bg-slate-100 dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 group-hover:border-amber-500 group-hover:shadow-xl transition-all duration-300 transform group-hover:-translate-y-1">
                 <Image
                   src={imgSrc}
-                  alt={category.name}
+                  alt=""
                   fill
                   className="object-cover group-hover:scale-110 transition-transform duration-500"
                   sizes="(max-width: 640px) 112px, 144px"

@@ -66,12 +66,8 @@ export default function AdminCategoriesPage() {
     }
   };
 
-  const renderCategoryTree = (categoryList: ICategory[], parentId: string | null = null, level: number = 0): JSX.Element[] => {
-    const children = categoryList.filter(
-      (cat) => (parentId === null && !cat.parent) || (cat.parent && typeof cat.parent === 'object' && cat.parent._id === parentId) || (typeof cat.parent === 'string' && cat.parent === parentId)
-    );
-
-    return children.flatMap((category) => [
+  const renderCategoryTree = (categoryList: ICategory[], level: number = 0): JSX.Element[] => {
+    return (categoryList || []).flatMap((category) => [
       <AdminTableRow key={category._id} className={level > 0 ? 'bg-slate-50/50 dark:bg-slate-900/30' : ''}>
         <AdminTableCell>
           <div className="flex items-center gap-2" style={{ paddingLeft: `${level * 1.5 + 0.25}rem` }}>
@@ -80,12 +76,30 @@ export default function AdminCategoriesPage() {
             ) : (
               <span className="text-slate-300 font-bold text-xs select-none">●</span>
             )}
-            <div>
+            {category.image ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={category.image.startsWith('/uploads/') ? `/api/images${category.image}` : category.image}
+                alt={category.name}
+                className="h-9 w-9 rounded-lg object-cover border border-slate-200 dark:border-slate-700 shrink-0"
+              />
+            ) : (
+              <span className="h-9 w-9 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-[10px] font-bold text-slate-400 shrink-0">
+                —
+              </span>
+            )}
+            <div className="min-w-0">
               <span className={`font-medium truncate block text-[13px] ${level === 0 ? 'font-extrabold' : 'text-slate-700 dark:text-slate-200'}`}>
                 {category.name}
               </span>
-              {level === 0 && (
-                <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold uppercase tracking-widest">Parent Category</span>
+              {level === 0 ? (
+                <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold uppercase tracking-widest">
+                  Parent Category
+                </span>
+              ) : (
+                <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-widest">
+                  Sub-category
+                </span>
               )}
             </div>
           </div>
@@ -122,7 +136,7 @@ export default function AdminCategoriesPage() {
           />
         </AdminTableCell>
       </AdminTableRow>,
-      ...renderCategoryTree(categoryList, category._id, level + 1),
+      ...renderCategoryTree(category.children || [], level + 1),
     ]);
   };
 

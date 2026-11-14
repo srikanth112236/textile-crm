@@ -143,3 +143,105 @@ export const uploadReviewPhoto = async (
   }
 };
 
+// Upload product video (used by the PDP floating player)
+export const uploadProductVideo = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    if (!req.file) {
+      throw new CustomError('No video file provided', 400);
+    }
+
+    const baseUrl = process.env.API_URL || process.env.API_BASE_URL || 'https://textile-crm-backend.onrender.com';
+    const videoUrl = `${baseUrl}/uploads/products/${req.file.filename}`;
+
+    res.status(200).json({
+      success: true,
+      videoUrl,
+      url: videoUrl,
+      message: 'Product video uploaded successfully',
+    });
+  } catch (error) {
+    // Delete uploaded file if there was an error
+    if (req.file) {
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch (unlinkError) {
+        console.error('Error deleting uploaded file:', unlinkError);
+      }
+    }
+    next(error);
+  }
+};
+
+// Upload category image (parent or sub-category hero image)
+export const uploadCategoryImage = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    if (!req.file) {
+      throw new CustomError('No image file provided', 400);
+    }
+
+    // Generate URL for the uploaded image
+    const baseUrl = process.env.API_URL || process.env.API_BASE_URL || 'https://textile-crm-backend.onrender.com';
+    const imageUrl = `${baseUrl}/uploads/categories/${req.file.filename}`;
+
+    res.status(200).json({
+      success: true,
+      imageUrl,
+      url: imageUrl,
+      path: `/uploads/categories/${req.file.filename}`,
+      message: 'Category image uploaded successfully',
+    });
+  } catch (error) {
+    // Delete uploaded file if there was an error
+    if (req.file) {
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch (unlinkError) {
+        console.error('Error deleting uploaded file:', unlinkError);
+      }
+    }
+    next(error);
+  }
+};
+
+// Upload Shop the Look hero image (outfit bundle cover)
+export const uploadShopLookImage = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    if (!req.file) {
+      throw new CustomError('No image file provided', 400);
+    }
+
+    const baseUrl = process.env.API_URL || process.env.API_BASE_URL || 'https://textile-crm-backend.onrender.com';
+    const imageUrl = `${baseUrl}/uploads/shoplooks/${req.file.filename}`;
+
+    res.status(200).json({
+      success: true,
+      imageUrl,
+      url: imageUrl,
+      path: `/uploads/shoplooks/${req.file.filename}`,
+      message: 'Shop the Look image uploaded successfully',
+    });
+  } catch (error) {
+    // Delete uploaded file if there was an error
+    if (req.file) {
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch (unlinkError) {
+        console.error('Error deleting uploaded file:', unlinkError);
+      }
+    }
+    next(error);
+  }
+};
+

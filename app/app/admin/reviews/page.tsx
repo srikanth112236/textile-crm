@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { Star, CheckCircle2, XCircle, Clock, Eye, MessageSquare, Reply, EyeOff, Flag, Trash2, ArrowLeft, Search, AlertCircle } from 'lucide-react';
+import { Star, CheckCircle2, XCircle, Clock, Eye, MessageSquare, Reply, EyeOff, Flag, Trash2, ArrowLeft, Search, AlertCircle, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   Dialog,
@@ -120,6 +120,16 @@ function AdminReviewsContent() {
     open: false,
     review: null,
   });
+  const [deleting, setDeleting] = useState(false);
+  const [busyReviewId, setBusyReviewId] = useState<string | null>(null);
+
+  /** Turn axios failures into something an admin can act on. */
+  const describeError = (error: any, fallback: string): string => {
+    if (!error?.response) {
+      return 'Cannot reach the server. Make sure the backend is running, then try again.';
+    }
+    return error.response?.data?.error || error.response?.data?.message || fallback;
+  };
 
   useEffect(() => {
     fetchProducts();
@@ -157,10 +167,9 @@ function AdminReviewsContent() {
       setReviews(response.data);
     } catch (error: any) {
       console.error('Failed to fetch reviews:', error);
-      const errorMessage = error.message || error.response?.data?.error || 'Failed to load reviews';
       toast({
         title: 'Error',
-        description: errorMessage,
+        description: describeError(error, 'Failed to load reviews'),
         variant: 'destructive',
       });
     } finally {
@@ -194,55 +203,62 @@ function AdminReviewsContent() {
       console.error('Failed to reply to review:', error);
       toast({
         title: 'Error',
-        description: error.response?.data?.error || 'Failed to add reply',
+        description: describeError(error, 'Failed to add reply'),
         variant: 'destructive',
       });
     }
   };
 
   const handleToggleHide = async (review: Review, hide: boolean) => {
-    if (!selectedProduct) return;
+    if (!selectedProduct || busyReviewId) return;
 
+    setBusyReviewId(review._id);
     try {
       await productsApi.toggleReviewVisibility(selectedProduct._id, review._id, hide);
       toast({
         title: 'Success',
         description: `Review ${hide ? 'hidden' : 'unhidden'} successfully`,
       });
-      fetchProductReviews(selectedProduct._id);
+      await fetchProductReviews(selectedProduct._id);
     } catch (error: any) {
       console.error('Failed to toggle visibility:', error);
       toast({
         title: 'Error',
-        description: 'Failed to update review visibility',
+        description: describeError(error, 'Failed to update review visibility'),
         variant: 'destructive',
       });
+    } finally {
+      setBusyReviewId(null);
     }
   };
 
   const handleToggleFlag = async (review: Review, flag: boolean) => {
-    if (!selectedProduct) return;
+    if (!selectedProduct || busyReviewId) return;
 
+    setBusyReviewId(review._id);
     try {
       await productsApi.toggleReviewFlag(selectedProduct._id, review._id, flag);
       toast({
         title: 'Success',
         description: `Review ${flag ? 'flagged' : 'unflagged'} successfully`,
       });
-      fetchProductReviews(selectedProduct._id);
+      await fetchProductReviews(selectedProduct._id);
     } catch (error: any) {
       console.error('Failed to toggle flag:', error);
       toast({
         title: 'Error',
-        description: 'Failed to update review flag',
+        description: describeError(error, 'Failed to update review flag'),
         variant: 'destructive',
       });
+    } finally {
+      setBusyReviewId(null);
     }
   };
 
   const handleDelete = async () => {
-    if (!deleteDialog.review || !selectedProduct) return;
+    if (!deleteDialog.review || !selectedProduct || deleting) return;
 
+    setDeleting(true);
     try {
       await productsApi.deleteReview(selectedProduct._id, deleteDialog.review._id);
       toast({
@@ -250,14 +266,16 @@ function AdminReviewsContent() {
         description: 'Review deleted successfully',
       });
       setDeleteDialog({ open: false, review: null });
-      fetchProductReviews(selectedProduct._id);
+      await fetchProductReviews(selectedProduct._id);
     } catch (error: any) {
       console.error('Failed to delete review:', error);
       toast({
         title: 'Error',
-        description: 'Failed to delete review',
+        description: describeError(error, 'Failed to delete review'),
         variant: 'destructive',
       });
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -457,6 +475,7 @@ function AdminReviewsContent() {
                           size="sm"
                           variant="default"
                           onClick={() => handleToggleHide(review, false)}
+                          disabled={busyReviewId === review._id}
                           className="gap-2 w-full bg-green-600 hover:bg-green-700 text-white"
                         >
                           <Eye className="h-4 w-4" />
@@ -467,6 +486,7 @@ function AdminReviewsContent() {
                           size="sm"
                           variant="outline"
                           onClick={() => handleToggleHide(review, true)}
+                          disabled={busyReviewId === review._id}
                           className="gap-2 w-full"
                         >
                           <EyeOff className="h-4 w-4" />
@@ -477,6 +497,7 @@ function AdminReviewsContent() {
                         size="sm"
                         variant="outline"
                         onClick={() => handleToggleFlag(review, !review.isFlagged)}
+                        disabled={busyReviewId === review._id}
                         className="gap-2 w-full"
                       >
                         <Flag className="h-4 w-4" />
@@ -486,6 +507,7 @@ function AdminReviewsContent() {
                         size="sm"
                         variant="destructive"
                         onClick={() => setDeleteDialog({ open: true, review })}
+                        disabled={busyReviewId === review._id}
                         className="gap-2 w-full"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -539,19 +561,46 @@ function AdminReviewsContent() {
 
         {/* Delete Dialog */}
         <AlertDialog open={deleteDialog.open} onOpenChange={(open) => {
-          if (!open) setDeleteDialog({ open: false, review: null });
+          if (!open && !deleting) setDeleteDialog({ open: false, review: null });
         }}>
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>Delete Review</AlertDialogTitle>
-              <AlertDialogDescription>
-                Are you sure you want to delete this review? This action cannot be undone.
+              <AlertDialogDescription asChild>
+                <div className="space-y-2">
+                  <p>
+                    Are you sure you want to delete the review by{' '}
+                    <span className="font-semibold text-foreground">
+                      {deleteDialog.review?.userName || 'this customer'}
+                    </span>
+                    ? It will be removed from the product page and moderation list. This action cannot be undone.
+                  </p>
+                  {deleteDialog.review?.comment ? (
+                    <p className="rounded-md border bg-muted/40 p-2 text-xs italic text-muted-foreground line-clamp-3">
+                      &quot;{deleteDialog.review.comment}&quot;
+                    </p>
+                  ) : null}
+                </div>
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground">
-                Delete
+              <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleDelete();
+                }}
+                disabled={deleting}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                {deleting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  'Delete'
+                )}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

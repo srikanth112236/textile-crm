@@ -207,7 +207,7 @@ export function Header() {
             <div className="flex items-center gap-1.5 shrink-0">
               <button
                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                className="lg:hidden p-1.5 text-slate-700 dark:text-slate-200 hover:text-amber-500 rounded-lg focus:outline-none"
+                className="xl:hidden p-1.5 text-slate-700 dark:text-slate-200 hover:text-amber-500 rounded-lg focus:outline-none"
                 aria-label="Toggle Navigation"
               >
                 {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -224,7 +224,7 @@ export function Header() {
             </div>
 
             {/* Middle: Single-line Desktop Navigation with Segregated Mega Menu */}
-            <nav className="hidden lg:flex items-center gap-0 min-w-0" onMouseLeave={() => setActiveMegaKey(null)} aria-label="Primary">
+            <nav className="hidden xl:flex items-center gap-0 min-w-0" onMouseLeave={() => setActiveMegaKey(null)} aria-label="Primary">
               {NAV_ITEMS.map((item) => (
                 <div
                   key={item.key}
@@ -331,8 +331,8 @@ export function Header() {
                 className="flex items-center gap-1.5 px-2 py-1.5 text-[11px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/80 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg border border-slate-200/80 dark:border-slate-700 transition-all shadow-sm"
               >
                 <Search className="w-3.5 h-3.5 text-amber-500" />
-                <span className="hidden xl:inline">Smart Search...</span>
-                <span className="hidden xl:inline-block px-1 py-px text-[9px] font-bold bg-white dark:bg-slate-900 rounded border border-slate-300 dark:border-slate-700 text-slate-400">
+                <span className="hidden 2xl:inline">Smart Search...</span>
+                <span className="hidden 2xl:inline-block px-1 py-px text-[9px] font-bold bg-white dark:bg-slate-900 rounded border border-slate-300 dark:border-slate-700 text-slate-400">
                   ⌘K
                 </span>
               </button>
@@ -341,7 +341,7 @@ export function Header() {
               <Link 
                 href="/user/wishlist" 
                 className="relative p-1.5 text-slate-700 dark:text-slate-300 hover:text-rose-500 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                aria-label="Wishlist"
+                aria-label={wishlistCount > 0 ? `Wishlist, ${wishlistCount} items` : 'Wishlist'}
               >
                 <Heart className="h-4 w-4" />
                 {wishlistCount > 0 && (
@@ -355,7 +355,7 @@ export function Header() {
               <Link 
                 href="/cart" 
                 className="relative p-1.5 text-slate-700 dark:text-slate-300 hover:text-amber-500 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                aria-label="Shopping Cart"
+                aria-label={(itemCount + guestCount) > 0 ? `Shopping Cart, ${itemCount + guestCount} items` : 'Shopping Cart'}
               >
                 <ShoppingBag className="h-4 w-4" />
                 {(itemCount + guestCount) > 0 && (
@@ -369,7 +369,7 @@ export function Header() {
               {isAuthenticated ? (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <button className="p-0.5 rounded-full border border-slate-200 dark:border-slate-800 hover:border-amber-500 transition-colors focus:outline-none">
+                    <button aria-label="Open account menu" className="p-0.5 rounded-full border border-slate-200 dark:border-slate-800 hover:border-amber-500 transition-colors focus:outline-none">
                       <Avatar className="h-7 w-7">
                         <AvatarImage src={(user as any)?.avatar} alt={user?.email} />
                         <AvatarFallback className="bg-amber-500 text-slate-950 font-extrabold text-xs">
@@ -431,7 +431,7 @@ export function Header() {
 
         {/* Mobile Expandable Menu */}
         {isMobileMenuOpen && (
-          <div className="lg:hidden border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-4 py-3 space-y-2">
+          <div className="xl:hidden border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-4 py-3 space-y-2">
             <div className="grid grid-cols-2 gap-2">
               {NAV_ITEMS.map((cat, i) => (
                 <Link

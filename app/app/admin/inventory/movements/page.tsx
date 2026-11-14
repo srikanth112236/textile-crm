@@ -25,6 +25,7 @@ import {
   AdminTableRow,
 } from '@/components/admin/DataTable';
 import { RowActions } from '@/components/admin/RowActions';
+import { MovementDetailDialog } from '@/components/admin/MovementDetailDialog';
 import {
   ArrowLeft, Search, RefreshCw, X, ChevronLeft, ChevronRight, Download, Filter, Loader2,
   Warehouse as WarehouseIcon, Package, ArrowUpDown, ArrowDown, ArrowUp,
@@ -58,6 +59,8 @@ export default function StockMovementsPage() {
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [selectedMovement, setSelectedMovement] = useState<StockMovement | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
   const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, pages: 0 });
 
   // Filter state
@@ -180,7 +183,7 @@ export default function StockMovementsPage() {
   }
 
   return (
-    <div className="px-3 py-4 space-y-4 max-w-7xl mx-auto">
+    <div className="w-full px-3 py-3 sm:px-4 lg:px-5 space-y-3">
       {/* Compact Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
         <div className="flex items-center gap-2.5">
@@ -354,7 +357,7 @@ export default function StockMovementsPage() {
                 const prodName = (typeof movement.productId === 'object' ? movement.productId?.name : movement.productName) || '—';
                 const prodSku = (typeof movement.productId === 'object' ? movement.productId?.sku : '') || (movement.variantSku || '');
                 return (
-                  <AdminTableRow key={movement._id} className="hover:bg-violet-500/[0.03] transition-colors">
+                  <AdminTableRow key={movement._id} className="hover:bg-violet-500/[0.03] transition-colors cursor-pointer" onClick={() => { setSelectedMovement(movement); setDetailOpen(true); }}>
                     <AdminTableCell className="font-mono text-[10px] font-medium whitespace-nowrap">{movement.movementNumber}</AdminTableCell>
                     <AdminTableCell>
                       <div className="max-w-[160px]">
@@ -428,6 +431,7 @@ export default function StockMovementsPage() {
           </div>
         )}
       </Card>
+      <MovementDetailDialog open={detailOpen} onOpenChange={(open) => { setDetailOpen(open); if (!open) setSelectedMovement(null); }} movement={selectedMovement} />
     </div>
   );
 }

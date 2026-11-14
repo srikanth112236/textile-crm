@@ -47,6 +47,7 @@ export default function CookieConsent() {
             <Button
               variant="ghost"
               size="icon"
+              aria-label="Close cookie consent"
               onClick={handleDecline}
               className="h-6 w-6"
             >

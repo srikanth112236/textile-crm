@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { productsApi } from '@/lib/api/products';
+import { getOrderStats } from '@/lib/api/orders';
 
 interface NavItem {
   title: string;
@@ -125,6 +126,13 @@ export function AdminSidebar() {
   const [expanded, setExpanded] = useState<string[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [pendingReviews, setPendingReviews] = useState(0);
+  const [orderCounts, setOrderCounts] = useState<{
+    total?: number;
+    pending?: number;
+    processing?: number;
+    delivered?: number;
+    returns?: number;
+  }>({});
 
   useEffect(() => {
     (async () => {
@@ -140,6 +148,32 @@ export function AdminSidebar() {
       } catch { /* ignore */ }
     })();
   }, []);
+
+  // Live order counters for the Sales submenu (same numbers as the orders tabs).
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await getOrderStats();
+        if (cancelled || !res.success) return;
+        setOrderCounts({
+          total: res.data.total,
+          pending: res.data.byStatus?.pending || 0,
+          processing: res.data.byStatus?.processing || 0,
+          delivered: res.data.byStatus?.delivered || 0,
+          returns: res.data.returns?.total || 0,
+        });
+      } catch { /* counts are non-critical */ }
+    };
+    load();
+    const timer = setInterval(load, 60000);
+    window.addEventListener('admin:orders-changed', load);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+      window.removeEventListener('admin:orders-changed', load);
+    };
+  }, [pathname]);
 
   const toggle = (href: string) =>
     setExpanded((p) => {
@@ -162,10 +196,22 @@ export function AdminSidebar() {
       }
       return false;
     }
+    if (child.href === '/admin/orders' && pathname === '/admin/orders') {
+      return !searchParams?.get('status') && !searchParams?.get('paymentStatus');
+    }
     if (child.href === '/admin/products' && pathname === '/admin/products') {
       return !searchParams?.get('status') && !searchParams?.get('lowStock') && !searchParams?.get('recent');
     }
     return pathname === child.href || pathname.startsWith(`${child.href}/`);
+  };
+
+  const orderBadge = (href: string): number | undefined => {
+    if (href === '/admin/orders') return orderCounts.total;
+    if (href === '/admin/orders?status=pending') return orderCounts.pending;
+    if (href === '/admin/orders?status=processing') return orderCounts.processing;
+    if (href === '/admin/orders?status=delivered') return orderCounts.delivered;
+    if (href === '/admin/returns') return orderCounts.returns;
+    return undefined;
   };
 
   const isActive = (item: NavItem): boolean => {
@@ -223,7 +269,7 @@ export function AdminSidebar() {
                         {item.children!.map((c) => {
                           const CI = c.icon;
                           const a = isChildActive(c);
-                          const count = c.countKey ? counts[c.countKey] : undefined;
+                          const count = c.countKey ? counts[c.countKey] : orderBadge(c.href);
                           return (
                             <Link key={c.href} href={c.href} className={cn(itemCls(a), 'h-7 text-xs justify-between')} aria-current={a ? 'page' : undefined}>
                               <span className="flex items-center gap-2 min-w-0">

@@ -25,13 +25,17 @@ export interface Paged<T> {
 
 export async function serverGetJSON<T extends Paged<unknown>>(
   path: string,
-  timeoutMs = 12000
+  timeoutMs = 12000,
+  revalidateSeconds = 60
 ): Promise<T | null> {
   try {
     const res = await fetch(`${API_BASE}${path}`, {
       signal: AbortSignal.timeout(timeoutMs),
       headers: { 'Content-Type': 'application/json' },
-      cache: 'no-store',
+      // Public catalogue data changes slowly. Cache each URL for 60s so a
+      // warm backend is not hit on every SSR request (home TTFB was ~5s in
+      // dev due to five uncached server calls).
+      next: { revalidate: revalidateSeconds },
     });
     if (!res.ok) return null;
     return (await res.json()) as T;

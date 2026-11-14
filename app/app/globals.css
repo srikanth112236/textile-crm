@@ -70,3 +70,69 @@
   }
 }
 
+/* WCAG AA contrast corrections for small text on light surfaces.
+   These selectors intentionally outrank the single utility class. */
+@layer utilities {
+  html:not(.dark) .text-slate-400:not(svg) {
+    color: #64748b; /* slate-500 */
+  }
+  html:not(.dark) .text-slate-500:not(svg) {
+    color: #475569; /* slate-600 */
+  }
+  html:not(.dark) .text-amber-600:not(svg) {
+    color: #b45309; /* amber-700 */
+  }
+  html:not(.dark) .text-amber-700:not(svg) {
+    color: #92400e; /* amber-800 */
+  }
+  html:not(.dark) .text-amber-500:not(svg) {
+    color: #b45309; /* amber-700 */
+  }
+  html:not(.dark) .text-emerald-600:not(svg) {
+    color: #047857; /* emerald-700 */
+  }
+  html:not(.dark) .text-green-600:not(svg) {
+    color: #15803d; /* green-700 */
+  }
+  html:not(.dark) .text-rose-500:not(svg) {
+    color: #be123c; /* rose-700 */
+  }
+  html:not(.dark) .text-red-500:not(svg) {
+    color: #b91c1c; /* red-700 */
+  }
+  html:not(.dark) .text-red-600:not(svg) {
+    color: #b91c1c; /* red-700 */
+  }
+  html:not(.dark) .text-destructive:not(svg) {
+    color: #b91c1c; /* red-700 */
+  }
+  html:not(.dark) .text-pink-500:not(svg) {
+    color: #be185d; /* pink-700 */
+  }
+  html:not(.dark) .text-muted-foreground {
+    color: #475569; /* slate-600 — keeps muted text readable on light surfaces */
+  }
+  html:not(.dark) .bg-destructive {
+    background-color: #b91c1c; /* red-700 — white text passes AA */
+  }
+  /* Badge backgrounds with white text need to be one step darker for AA. */
+  html .bg-rose-500 {
+    background-color: #e11d48; /* rose-600 */
+  }
+  html .bg-violet-500 {
+    background-color: #7c3aed; /* violet-600 */
+  }
+  .bg-rose-500.border-transparent {
+    background-color: #e11d48; /* rose-600 */
+  }
+  .bg-violet-500.border-transparent {
+    background-color: #7c3aed; /* violet-600 */
+  }
+  .bg-emerald-500.border-transparent {
+    background-color: #047857; /* emerald-700 */
+  }
+  button.bg-emerald-600 {
+    background-color: #047857; /* emerald-700 — white text passes AA */
+  }
+}
+

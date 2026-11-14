@@ -7,11 +7,15 @@ import { Settings } from '../models/Settings';
 import {
   createRazorpayOrder,
   verifyRazorpaySignature,
-  refundRazorpayPayment,
   getRazorpayKeyId,
   isRazorpayConfigured,
 } from '../services/razorpay';
 import { emitToUser, emitToAdmins } from '../config/socket';
+import {
+  RefundError,
+  createOrderRefund,
+  handleRazorpayRefundWebhook,
+} from '../services/refunds';
 
 async function getSettings() {
   let s = await Settings.findOne({ key: 'global' });
@@ -293,20 +297,9 @@ export const razorpayWebhook = async (req: Request, res: Response): Promise<void
         await order.save();
       }
     } else if (event?.startsWith('refund.') && parsed?.payload?.refund?.entity) {
-      const r = parsed.payload.refund.entity;
-      const full = r.amount === r.payment_amount;
-      const ledger = await Payment.findOneAndUpdate(
-        { razorpayPaymentId: r.payment_id },
-        { status: full ? RazorpayPaymentStatus.REFUNDED : RazorpayPaymentStatus.PARTIALLY_REFUNDED, refundId: r.id, refundAmount: r.amount / 100 },
-        { new: true }
-      );
-      const order = ledger?.orderId ? await Order.findById(ledger.orderId) : null;
-      if (order && order.paymentStatus !== PaymentStatus.REFUNDED) {
-        order.paymentStatus = full ? PaymentStatus.REFUNDED : PaymentStatus.PARTIALLY_REFUNDED;
-        if (full) order.status = OrderStatus.REFUNDED;
-        (order as any).refundAmount = r.amount / 100;
-        await order.save();
-      }
+      // Refund events are reconciled through the transaction ledger. This is
+      // idempotent and never overwrites cumulative refunded amounts.
+      await handleRazorpayRefundWebhook(parsed);
     }
     res.status(200).json({ received: true });
   } catch (err) {
@@ -315,58 +308,60 @@ export const razorpayWebhook = async (req: Request, res: Response): Promise<void
   }
 };
 
-// POST /api/payments/refund { orderId, amount? } — Admin
+// POST /api/payments/refund { orderId, amount?, notes?, refundMethod?, upiId?, bank... }
+// Legacy endpoint kept for compatibility; it now uses the same guarded refund
+// service as the order detail and refunds pages.
 export const refundPayment = async (req: Request, res: Response): Promise<void> => {
   try {
     const schema = Joi.object({
       orderId: Joi.string().regex(/^[0-9a-fA-F]{24}$/).required(),
       amount: Joi.number().min(1).optional(),
       notes: Joi.string().max(500).optional().allow(''),
+      refundMethod: Joi.string().valid('source', 'upi', 'bank').default('source'),
+      upiId: Joi.string().trim().max(100).optional().allow(''),
+      bankAccountName: Joi.string().trim().max(100).optional().allow(''),
+      bankAccountNumber: Joi.string().trim().max(30).optional().allow(''),
+      bankIfsc: Joi.string().trim().max(11).uppercase().optional().allow(''),
     });
     const { error, value } = schema.validate(req.body);
     if (error) {
       res.status(400).json({ error: 'Validation error', details: error.details.map((d) => d.message) });
       return;
     }
-    const order = await Order.findById(value.orderId);
-    if (!order) {
-      res.status(404).json({ error: 'Order not found' });
+
+    const result = await createOrderRefund({
+      orderId: value.orderId,
+      amount: value.amount,
+      notes: value.notes || 'Refund initiated from the payments ledger',
+      destination: value.refundMethod,
+      upiId: value.upiId,
+      bankAccountName: value.bankAccountName,
+      bankAccountNumber: value.bankAccountNumber,
+      bankIfsc: value.bankIfsc,
+      adminId: req.user?.userId,
+    });
+
+    const refund: any = result.refund;
+    const message =
+      result.mode === 'razorpay'
+        ? refund?.status === 'completed'
+          ? 'Refund processed via Razorpay'
+          : 'Refund submitted to Razorpay — tracking until processed'
+        : 'Manual refund recorded — mark it completed after settlement';
+
+    res.status(200).json({
+      success: true,
+      message,
+      data: await Order.findById(value.orderId),
+      refund,
+      refundMode: result.mode,
+    });
+  } catch (error: any) {
+    if (error instanceof RefundError) {
+      res.status(error.status).json({ error: error.message, details: error.details });
       return;
     }
-    const rpPaymentId = (order as any).razorpayPaymentId;
-    if (!rpPaymentId) {
-      // Manual/COD order — mark refunded in DB only (partial keeps order alive)
-      const amt = value.amount || order.total;
-      const isPartial = amt < order.total;
-      order.paymentStatus = isPartial ? PaymentStatus.PARTIALLY_REFUNDED : PaymentStatus.REFUNDED;
-      if (!isPartial) order.status = OrderStatus.REFUNDED;
-      (order as any).refundAmount = amt;
-      (order as any).refundNotes = value.notes;
-      await order.save();
-      res.status(200).json({ success: true, message: isPartial ? 'Partial refund recorded (no Razorpay payment found)' : 'Order marked refunded (no Razorpay payment found)', data: order });
-      return;
-    }
-    const refund = await refundRazorpayPayment(rpPaymentId, value.amount);
-    const amt = value.amount || order.total;
-    const isPartial = amt < order.total;
-    order.paymentStatus = isPartial ? PaymentStatus.PARTIALLY_REFUNDED : PaymentStatus.REFUNDED;
-    if (!isPartial) order.status = OrderStatus.REFUNDED;
-    (order as any).refundAmount = amt;
-    await order.save();
-    try {
-      const { Payment } = await import('../models/Payment');
-      const payment: any = await Payment.findOne({ razorpayPaymentId: rpPaymentId });
-      if (payment) {
-        const rf: any = refund;
-        payment.refundId = String(rf.id || rf.refund_id || '');
-        payment.refundAmount = amt;
-        payment.status = isPartial ? 'partially_refunded' : 'refunded';
-        await payment.save().catch(() => {});
-      }
-    } catch { /* ledger optional */ }
-    res.status(200).json({ success: true, message: isPartial ? 'Partial refund processed via Razorpay' : 'Refund processed via Razorpay', data: { order, refund } });
-  } catch (err: any) {
-    console.error('Refund error:', err.response?.data || err.message);
+    console.error('Refund error:', error);
     res.status(500).json({ error: 'Refund failed' });
   }
 };

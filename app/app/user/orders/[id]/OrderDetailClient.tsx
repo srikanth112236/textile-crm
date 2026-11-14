@@ -526,11 +526,20 @@ export default function OrderDetailClient({ orderId }: OrderDetailClientProps) {
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Subtotal</span>
-                  <span>{formatPrice(order.total)}</span>
+                  <span>{formatPrice(order.subtotal ?? Math.max(0, order.total - (order.shippingCost || 0) + (order.discountAmount || 0)))}</span>
                 </div>
+                {(order.discountAmount || 0) > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Discount{(order as any).discountCode ? ` (${(order as any).discountCode})` : ''}</span>
+                    <span className="text-emerald-600">-{formatPrice(order.discountAmount || 0)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Shipping</span>
-                  <span className="text-green-600">Free</span>
+                  <span className={(order.shippingCost || 0) === 0 ? 'text-green-600' : ''}>
+                    {(order.shippingCost || 0) === 0 ? 'Free' : formatPrice(order.shippingCost || 0)}
+                    {order.shippingCourier ? <span className="text-muted-foreground"> · {order.shippingCourier}</span> : null}
+                  </span>
                 </div>
                 {order.refundAmount ? (
                   <>

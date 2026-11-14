@@ -1,13 +1,12 @@
 import React from 'react';
 import { Metadata } from 'next';
-import RefundsClient from './RefundsClient';
+import PaymentsClient from '../PaymentsClient';
 
 export const metadata: Metadata = {
   title: 'Refunds | Admin Dashboard',
-  description: 'View all refunded orders',
+  description: 'Refund ledger, manual settlements, and queue',
 };
 
 export default function RefundsPage() {
-  return <RefundsClient />;
+  return <PaymentsClient initialTab="refunds" />;
 }
-

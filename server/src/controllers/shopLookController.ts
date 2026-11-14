@@ -32,7 +32,10 @@ export const getShopLooks = async (_req: Request, res: Response): Promise<void> 
 // GET /api/shop-look/admin — Admin all
 export const listShopLooks = async (_req: Request, res: Response): Promise<void> => {
   try {
-    const rows = await ShopLook.find({}).sort({ position: 1, createdAt: -1 }).populate('productIds', 'name price').lean();
+    const rows = await ShopLook.find({})
+      .sort({ position: 1, createdAt: -1 })
+      .populate('productIds', 'name price compareAtPrice images stock status')
+      .lean();
     res.status(200).json({ success: true, data: rows });
   } catch (err) {
     console.error('List shop looks error:', err);

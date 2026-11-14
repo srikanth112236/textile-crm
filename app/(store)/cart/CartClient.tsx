@@ -111,7 +111,7 @@ export const CartClient: React.FC = () => {
   }
 
   return (
-    <div className="container py-8">
+    <div className="w-full px-3 py-3 sm:px-4 lg:px-5 space-y-4">
       <div className="flex items-center gap-4 mb-6">
         <Button variant="ghost" size="icon" asChild>
           <Link href="/products">

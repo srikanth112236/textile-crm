@@ -1,13 +1,9 @@
 import { Metadata } from 'next';
 import { Suspense } from 'react';
-import Link from 'next/link';
-import Image from 'next/image';
-import { formatPrice } from '@/lib/utils';
 import { Header } from '@/components/navigation/Header';
 import { Footer } from '@/components/navigation/Footer';
-import { MentoosHero } from '@/components/store/MentoosHero';
+import { MentoosHero, HERO_PRELOAD_IMAGE } from '@/components/store/MentoosHero';
 import { CategoryGrid } from '@/components/store/CategoryGrid';
-import { DiscountsOffersSection } from '@/components/store/DiscountsOffersSection';
 import { ShopByFit } from '@/components/store/ShopByFit';
 import { ShopByStyle } from '@/components/store/ShopByStyle';
 import { ProductSlider } from '@/components/store/ProductSlider';
@@ -22,10 +18,12 @@ import { Skeleton } from '@/components/ui/skeleton';
 export const metadata: Metadata = {
   title: 'Mentoos | Modern Men\'s Fashion, Oversized Tees & Ethnic Wear',
   description: 'Shop premium men\'s apparel at Mentoos. Explore oversized t-shirts, casual shirts, formal trousers, cargo joggers, activewear, and designer kurtas.',
+  alternates: { canonical: '/' },
   openGraph: {
     title: 'Mentoos | Modern Men\'s Fashion & Apparel',
     description: 'Shop premium men\'s apparel at Mentoos. Explore oversized t-shirts, casual shirts, formal trousers, cargo joggers, activewear, and designer kurtas.',
     type: 'website',
+    url: '/',
   },
 };
 
@@ -66,7 +64,6 @@ async function getHomeData() {
 function HomeLoadingSkeleton() {
   return (
     <div className="space-y-12">
-      <Skeleton className="h-[480px] w-full rounded-3xl" />
       <div className="flex gap-4 overflow-hidden">
         {[...Array(6)].map((_, i) => (
           <Skeleton key={i} className="h-32 w-32 rounded-2xl shrink-0" />
@@ -81,73 +78,77 @@ function HomeLoadingSkeleton() {
   );
 }
 
-export default async function HomePage() {
+async function HomeSections() {
   const { newArrivals, trending, bestSellers, categories } = await getHomeData();
 
   return (
+    <>
+      {/* 2. Shop by Category */}
+      <CategoryGrid categories={categories} />
+
+      {/* 3. New Arrivals */}
+      <ProductSlider
+        products={newArrivals}
+        title="NEW ARRIVALS"
+        subtitle="Fresh drops, just landed in the latest fits and fabrics."
+      />
+
+      {/* 4. Trending Now */}
+      <ProductSlider
+        products={trending}
+        title="TRENDING NOW"
+        subtitle="What everyone is shopping this week."
+      />
+
+      {/* 5. Best Sellers */}
+      <ProductSlider
+        products={bestSellers}
+        title="BEST SELLERS"
+        subtitle="Customer favorites with instant discount savings."
+      />
+
+      {/* 6. Shop by Fit */}
+      <ShopByFit />
+
+      {/* 7. Shop by Style */}
+      <ShopByStyle />
+
+      {/* 8. Shop the Look */}
+      <ShopTheLook />
+
+      {/* 9. Customer Reviews */}
+      <CustomerReviews />
+
+      {/* 10. UGC / Customer Videos */}
+      <UgcReels />
+
+      {/* 11. Instagram / Social Content */}
+      <InstagramFeed />
+
+      {/* Coupons are intentionally NOT advertised on the public storefront —
+          all available codes surface at cart/checkout, where eligibility can
+          be evaluated against the actual basket. */}
+
+      {/* 13. Trust Section */}
+      <TrustBadges />
+    </>
+  );
+}
+
+export default function HomePage() {
+  return (
     <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 font-sans text-slate-900 dark:text-slate-100">
+      <link rel="preload" as="image" href={HERO_PRELOAD_IMAGE} fetchPriority="high" />
       {/* 1. Header with Compact Navbar, Hover Mega Menu & Header Smart Search */}
       <Header />
 
       {/* Main Storefront Content — spec §4 order, one section each */}
-      <main className="flex-1 w-full">
+      <main id="main-content" className="flex-1 w-full">
         <div className="container mx-auto px-4 py-6 space-y-10 sm:px-6 sm:space-y-14 lg:px-10">
+          {/* Hero is part of the initial shell so LCP does not wait for API data. */}
+          <MentoosHero />
           <Suspense fallback={<HomeLoadingSkeleton />}>
-            {/* 1. Main Hero Banner — contained rounded card, never full-bleed */}
-
-            <MentoosHero />
-            {/* 2. Shop by Category */}
-            <CategoryGrid categories={categories} />
-
-            {/* 3. New Arrivals */}
-            <ProductSlider
-              products={newArrivals}
-              title="NEW ARRIVALS"
-              subtitle="Fresh drops, just landed in the latest fits and fabrics."
-            />
-
-            {/* 4. Trending Now */}
-            <ProductSlider
-              products={trending}
-              title="TRENDING NOW"
-              subtitle="What everyone is shopping this week."
-            />
-
-            {/* 5. Best Sellers */}
-            <ProductSlider
-              products={bestSellers}
-              title="BEST SELLERS"
-              subtitle="Customer favorites with instant discount savings."
-            />
-
-            {/* 6. Shop by Fit */}
-            <ShopByFit />
-
-            {/* 7. Shop by Style */}
-            <ShopByStyle />
-
-            {/* 8. Shop the Look */}
-            <ShopTheLook />
-
-            {/* 9. Customer Reviews */}
-            <CustomerReviews />
-
-            {/* 10. UGC / Customer Videos */}
-            <UgcReels />
-
-            {/* 28. Smart Cart Recommendations (already in CartContext) */}
-
-            {/* 33. Personalized Recommendations */}
-         
-
-            {/* 11. Instagram / Social Content */}
-            <InstagramFeed />
-
-            {/* 12. Offers */}
-            <DiscountsOffersSection />
-
-            {/* 13. Trust Section */}
-            <TrustBadges />
+            <HomeSections />
           </Suspense>
         </div>
       </main>

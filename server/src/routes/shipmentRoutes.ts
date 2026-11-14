@@ -1,8 +1,10 @@
 import express from 'express';
 import {
   getServiceability,
+  getShippingQuoteHandler,
   shipOrder,
   trackShipment,
+  syncOrderTracking,
   publicTrackByOrderNumber,
   shiprocketWebhook,
   cancelShipment,
@@ -16,15 +18,18 @@ import {
 } from '../controllers/shipmentController';
 import { authenticate } from '../middleware/auth';
 import { requireAdmin } from '../middleware/rbac';
+import { shippingQuoteRateLimit } from '../middleware/security';
 
 const router = express.Router();
 
 router.get('/serviceability', getServiceability);
+router.post('/quote', shippingQuoteRateLimit, getShippingQuoteHandler);
 router.get('/track-order/:orderNumber', publicTrackByOrderNumber);
 router.post('/webhook', shiprocketWebhook);
 
 router.use(authenticate);
 router.get('/track/:awb', trackShipment);
+router.post('/orders/:id/sync-tracking', requireAdmin, syncOrderTracking);
 router.post('/orders/:id/ship', requireAdmin, shipOrder);
 router.post('/orders/:id/assign-awb', requireAdmin, assignAWB);
 router.post('/orders/:id/pickup', requireAdmin, requestPickup);

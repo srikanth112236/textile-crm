@@ -150,6 +150,7 @@ function SortableVariantImage({
           type="button"
           variant="ghost"
           size="icon"
+          aria-label="Move image up"
           className="h-6 w-6"
           onClick={onMoveUp}
           disabled={!canMoveUp}
@@ -160,6 +161,7 @@ function SortableVariantImage({
           type="button"
           variant="ghost"
           size="icon"
+          aria-label="Move image down"
           className="h-6 w-6"
           onClick={onMoveDown}
           disabled={!canMoveDown}
@@ -173,6 +175,7 @@ function SortableVariantImage({
         type="button"
         variant="ghost"
         size="icon"
+        aria-label="Remove variant image"
         className="h-8 w-8 text-muted-foreground hover:text-destructive"
         onClick={onRemove}
       >

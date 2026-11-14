@@ -291,7 +291,7 @@ export const ReviewsEnhanced: React.FC<ReviewsEnhancedProps> = ({ productId }) =
           )}
         </div>
         <Select value={sortBy} onValueChange={(value: any) => setSortBy(value)}>
-          <SelectTrigger className="w-[180px]">
+          <SelectTrigger aria-label="Sort reviews" className="w-[180px]">
             <SelectValue placeholder="Sort by" />
           </SelectTrigger>
           <SelectContent>

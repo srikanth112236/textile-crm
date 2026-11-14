@@ -263,6 +263,8 @@ export interface IProduct extends Document {
     url: string;
     thumbnailUrl?: string;
     title?: string;
+    /** Show the draggable floating player on the storefront PDP (default true). */
+    enabled?: boolean;
   }>;
   
   // Advanced Variants
@@ -665,6 +667,7 @@ const ProductSchema = new Schema<IProduct>(
       url: { type: String, required: true, trim: true },
       thumbnailUrl: { type: String, trim: true },
       title: { type: String, trim: true },
+      enabled: { type: Boolean, default: true },
     }],
     
     // Advanced Variants

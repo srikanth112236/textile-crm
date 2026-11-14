@@ -111,63 +111,63 @@ export function ProductCard({ product, className, showQuickView = true, onQuickV
     <>
     <Card className={cn('group overflow-hidden transition-all duration-300 hover:shadow-xl border-slate-200/80 dark:border-slate-800 rounded-2xl bg-white dark:bg-slate-900 flex flex-col justify-between', className)}>
       <div>
-        <Link href={`/products/${product._id}`} className="block">
-          <div className="relative aspect-square w-full overflow-hidden bg-slate-100 dark:bg-slate-950">
+        <div className="relative aspect-square w-full overflow-hidden bg-slate-100 dark:bg-slate-950">
+          <Link href={`/products/${product._id}`} aria-label={product.name} className="absolute inset-0 z-0">
             <Image
               src={imageUrl}
-              alt={product.name}
+              alt=""
               fill
               loading="lazy"
               priority={false}
               className="object-cover transition-transform duration-500 group-hover:scale-105"
               sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
             />
-            {discountPercent > 0 && (
-              <Badge className="absolute top-2 left-2 bg-rose-500 text-white font-extrabold text-[10px] px-2 py-0.5">
-                {discountPercent}% OFF
-              </Badge>
-            )}
-            {/* Admin + computed badges: New / Bestseller / Trending / Limited / Sale */}
-            <div className="absolute bottom-2 left-2 flex gap-1 flex-wrap">
-              {isNew && <Badge className={cn('font-extrabold text-[10px] px-2 py-0.5', badgeStyle.new)}>New</Badge>}
-              {isSale && <Badge className={cn('font-extrabold text-[10px] px-2 py-0.5', badgeStyle.sale)}>Sale</Badge>}
-              {adminBadges.map((b) => (
-                <Badge key={b} className={cn('font-extrabold text-[10px] px-2 py-0.5 capitalize', badgeStyle[b])}>{b}</Badge>
-              ))}
-            </div>
-            {isOutOfStock && (
-              <Badge variant="destructive" className="absolute top-2 right-2 text-[10px]">
-                Out of Stock
-              </Badge>
-            )}
-            {isLowStock && !isOutOfStock && (
-              <Badge variant="outline" className="absolute top-2 right-2 bg-amber-100 text-amber-900 border-amber-300 text-[10px]">
-                Low Stock
-              </Badge>
-            )}
-            
-            {/* Top Right Action Overlay: Wishlist & Compare */}
-            <div 
-              className="absolute top-2 right-2 flex flex-col gap-1.5 opacity-90 group-hover:opacity-100 transition-opacity"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <WishlistButton productId={product._id} />
-              
-              <button
-                onClick={toggleCompare}
-                className={cn(
-                  'p-2 rounded-full backdrop-blur-md transition-all border shadow-sm',
-                  isCompared 
-                    ? 'bg-amber-500 text-slate-950 border-amber-400' 
-                    : 'bg-white/80 dark:bg-slate-900/80 text-slate-700 dark:text-slate-300 hover:text-amber-500 border-white/20'
-                )}
-                title={isCompared ? 'Remove from compare' : 'Add to compare'}
-              >
-                {isCompared ? <Check className="w-4 h-4 font-bold" /> : <Scale className="w-4 h-4" />}
-              </button>
-            </div>
+          </Link>
+          {discountPercent > 0 && (
+            <Badge className="pointer-events-none absolute top-2 left-2 z-10 bg-rose-500 text-white font-extrabold text-[10px] px-2 py-0.5">
+              {discountPercent}% OFF
+            </Badge>
+          )}
+          {/* Admin + computed badges: New / Bestseller / Trending / Limited / Sale */}
+          <div className="pointer-events-none absolute bottom-2 left-2 z-10 flex gap-1 flex-wrap">
+            {isNew && <Badge className={cn('font-extrabold text-[10px] px-2 py-0.5', badgeStyle.new)}>New</Badge>}
+            {isSale && <Badge className={cn('font-extrabold text-[10px] px-2 py-0.5', badgeStyle.sale)}>Sale</Badge>}
+            {adminBadges.map((b) => (
+              <Badge key={b} className={cn('font-extrabold text-[10px] px-2 py-0.5 capitalize', badgeStyle[b])}>{b}</Badge>
+            ))}
           </div>
-        </Link>
+          {isOutOfStock && (
+            <Badge variant="destructive" className="pointer-events-none absolute top-2 right-2 z-10 text-[10px]">
+              Out of Stock
+            </Badge>
+          )}
+          {isLowStock && !isOutOfStock && (
+            <Badge variant="outline" className="pointer-events-none absolute top-2 right-2 z-10 bg-amber-100 text-amber-900 border-amber-300 text-[10px]">
+              Low Stock
+            </Badge>
+          )}
+          
+          {/* Top Right Action Overlay: Wishlist & Compare */}
+          <div 
+            className="absolute top-2 right-2 z-20 flex flex-col gap-1.5 opacity-90 group-hover:opacity-100 transition-opacity"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <WishlistButton productId={product._id} />
+            
+            <button
+              onClick={toggleCompare}
+              className={cn(
+                'p-2 rounded-full backdrop-blur-md transition-all border shadow-sm',
+                isCompared 
+                  ? 'bg-amber-500 text-slate-950 border-amber-400' 
+                  : 'bg-white/80 dark:bg-slate-900/80 text-slate-700 dark:text-slate-300 hover:text-amber-500 border-white/20'
+              )}
+              title={isCompared ? 'Remove from compare' : 'Add to compare'}
+            >
+              {isCompared ? <Check className="w-4 h-4 font-bold" /> : <Scale className="w-4 h-4" />}
+            </button>
+          </div>
+        </div>
         
         <CardContent className="p-4 space-y-2">
           <div className="flex items-center justify-between">
@@ -183,9 +183,9 @@ export function ProductCard({ product, className, showQuickView = true, onQuickV
           </div>
 
           <Link href={`/products/${product._id}`}>
-            <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100 line-clamp-2 group-hover:text-amber-500 transition-colors">
+            <h2 className="font-bold text-sm text-slate-900 dark:text-slate-100 line-clamp-2 group-hover:text-amber-500 transition-colors">
               {product.name}
-            </h3>
+            </h2>
           </Link>
 
           <div className="flex items-baseline gap-2 pt-1">

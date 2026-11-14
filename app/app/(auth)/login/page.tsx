@@ -109,9 +109,9 @@ function LoginForm() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900 dark:text-gray-100">
+        <h1 className="mt-6 text-center text-3xl font-extrabold text-gray-900 dark:text-gray-100">
           Sign in to your account
-        </h2>
+        </h1>
         <div className="mt-4 flex justify-center gap-2">
           <Button variant={mode === 'password' ? 'default' : 'outline'} size="sm" onClick={() => setMode('password')}>Password</Button>
           <Button variant={mode === 'otp' ? 'default' : 'outline'} size="sm" onClick={() => setMode('otp')}>Mobile OTP</Button>

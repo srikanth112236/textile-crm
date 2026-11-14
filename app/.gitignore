@@ -35,3 +35,13 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+
+# QA artifacts
+.auth/
+reports/
+test-results/
+playwright-report/
+
+/.next-prod/
+/.next-verify/
+

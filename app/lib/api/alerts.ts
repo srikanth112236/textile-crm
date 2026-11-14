@@ -21,6 +21,14 @@ export const alertsApi = {
     const res = await apiClient.get('/price-alerts/admin');
     return res.data.data;
   },
+  async removeBackInStock(id: string) {
+    const res = await apiClient.delete(`/stock-alerts/${id}`);
+    return res.data;
+  },
+  async removePriceAlert(id: string) {
+    const res = await apiClient.delete(`/price-alerts/${id}`);
+    return res.data;
+  },
 };
 
 export const otpApi = {

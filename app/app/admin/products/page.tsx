@@ -422,7 +422,7 @@ function AdminProductsContent() {
               <TooltipTrigger asChild>
                 <div>
                   <Select value={getCurrentFilterValue()} onValueChange={(value) => handleStatusChange(value, false)}>
-                    <SelectTrigger className="w-[180px]">
+                    <SelectTrigger aria-label="Filter products by status" className="w-[180px]">
                       <SelectValue placeholder="Filter products" />
                     </SelectTrigger>
                     <SelectContent>

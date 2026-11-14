@@ -24,7 +24,14 @@ import {
   Tag,
   Palette,
   Ruler,
-  SlidersHorizontal
+  SlidersHorizontal,
+  IndianRupee,
+  Shirt,
+  Layers,
+  Shapes,
+  PartyPopper,
+  Star,
+  Award
 } from 'lucide-react';
 import { productsApi, ProductFilters } from '@/lib/api/products';
 import { categoriesApi } from '@/lib/api/categories';
@@ -33,6 +40,8 @@ import { useToast } from '@/hooks/use-toast';
 import { cn, getErrorMessage } from '@/lib/utils';
 import { KeyboardShortcutsModal } from '@/components/admin/KeyboardShortcutsModal';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { ActiveFilterChip } from './ActiveFilterChip';
+import { useFocusTrap } from '@/lib/hooks/useFocusTrap';
 
 interface ProductsListingClientProps {
   initialProducts: IProduct[];
@@ -79,6 +88,8 @@ export function ProductsListingClient({
 }: ProductsListingClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const filterCategoryParam = searchParams.get('category') || '';
+  const filterSearchParam = searchParams.get('search') || '';
   const { toast } = useToast();
 
   const [products, setProducts] = useState<IProduct[]>(initialProducts);
@@ -87,6 +98,7 @@ export function ProductsListingClient({
   const [availableSizes, setAvailableSizes] = useState<string[]>(['S', 'M', 'L', 'XL', 'XXL']);
   const [availableColors, setAvailableColors] = useState<Array<{ name: string; hex: string }>>(FALLBACK_COLORS);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
   const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
 
@@ -112,7 +124,49 @@ export function ProductsListingClient({
   const [availableFabrics, setAvailableFabrics] = useState<string[]>(FALLBACK_FABRICS);
   const [availablePatterns, setAvailablePatterns] = useState<string[]>(FALLBACK_PATTERNS);
   const [availableOccasions, setAvailableOccasions] = useState<string[]>(FALLBACK_OCCASIONS);
+  const [sizeCounts, setSizeCounts] = useState<Record<string, number>>({});
+  const [colorCounts, setColorCounts] = useState<Record<string, number>>({});
+  const [categoryCounts, setCategoryCounts] = useState<Record<string, number>>({});
+  const [priceBounds, setPriceBounds] = useState({ min: 0, max: 5000 });
+  const [categoryQuery, setCategoryQuery] = useState('');
+  const [showAllCategories, setShowAllCategories] = useState(false);
+  const [filtersLoaded, setFiltersLoaded] = useState(false);
+  // Controlled so the open panel survives any parent re-render (e.g. when a
+  // filter updates the URL) — and guarantees exactly one section stays open.
+  const [openFilter, setOpenFilter] = useState('cat');
   const fetchSeq = useRef(0);
+  const drawerRef = useRef<HTMLDivElement>(null);
+  const filterTriggerRef = useRef<HTMLButtonElement>(null);
+
+  useFocusTrap(showMobileSidebar, drawerRef, () => {
+    setShowMobileSidebar(false);
+    filterTriggerRef.current?.focus();
+  });
+
+  const buildFilters = (page: number): ProductFilters => {
+    const searchQ = filterSearchParam;
+    return {
+      page,
+      limit: 20,
+      category: filterCategoryParam || undefined,
+      minPrice: searchParams.get('minPrice') ? parseFloat(searchParams.get('minPrice') as string) : undefined,
+      maxPrice: searchParams.get('maxPrice') ? parseFloat(searchParams.get('maxPrice') as string) : undefined,
+      search: searchQ || undefined,
+      color: searchParams.get('color') || undefined,
+      size: searchParams.get('size') || undefined,
+      fit: searchParams.get('fit') || undefined,
+      fabric: searchParams.get('fabric') || undefined,
+      pattern: searchParams.get('pattern') || undefined,
+      occasion: searchParams.get('occasion') || undefined,
+      minRating: searchParams.get('minRating') ? parseFloat(searchParams.get('minRating') as string) : undefined,
+      minDiscount: searchParams.get('minDiscount') ? parseFloat(searchParams.get('minDiscount') as string) : undefined,
+      inStock: searchParams.get('inStock') === 'true' ? true : undefined,
+      badge: searchParams.get('badge') || undefined,
+      sort: searchParams.get('sort') || 'createdAt',
+      order: (searchParams.get('order') as any) || 'desc',
+      status: 'active',
+    };
+  };
 
   // Load dynamic filter metadata (available sizes, colors, price range, categories)
   // Debounced + cached so route switches stay instant; fallbacks keep every section visible.
@@ -121,8 +175,8 @@ export function ProductsListingClient({
     let cancelled = false;
     const timer = setTimeout(async () => {
       try {
-        const cat = searchParams.get('category') || '';
-        const searchQ = searchParams.get('search') || '';
+        const cat = filterCategoryParam;
+        const searchQ = filterSearchParam;
 
         const res = await productsApi.getFilters({ category: cat || undefined, search: searchQ || undefined });
         if (cancelled) return;
@@ -135,6 +189,12 @@ export function ProductsListingClient({
           }
           if (res.data.colors && res.data.colors.length > 0) {
             setAvailableColors(res.data.colors);
+          }
+          setSizeCounts(res.data.sizeCounts || {});
+          setColorCounts(res.data.colorCounts || {});
+          setCategoryCounts(res.data.categoryCounts || {});
+          if (typeof res.data.minPrice === 'number' && typeof res.data.maxPrice === 'number') {
+            setPriceBounds({ min: res.data.minPrice, max: res.data.maxPrice });
           }
           // Always keep Fit/Fabric/Pattern/Occasion visible: backend distinct may be empty
           // when products don't set those fields yet — fall back to curated lists.
@@ -156,10 +216,12 @@ export function ProductsListingClient({
           setAvailableOccasions((prev) => (prev.length > 0 ? prev : FALLBACK_OCCASIONS));
           console.error('Failed to load dynamic filter options:', err);
         }
+      } finally {
+        if (!cancelled) setFiltersLoaded(true);
       }
     }, 120);
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [searchParams]);
+  }, [filterCategoryParam, filterSearchParam]);
 
   // Synchronize state when URL searchParams change
   // Uses request id so rapid filter clicks never stack slow requests.
@@ -208,27 +270,7 @@ export function ProductsListingClient({
     setMinDiscount(searchParams.get('minDiscount') || '');
     setInStockOnly(searchParams.get('inStock') === 'true');
 
-    const filters: ProductFilters = {
-      page: parseInt(searchParams.get('page') || '1', 10),
-      limit: 20,
-      category: cat || undefined,
-      minPrice: minP ? parseFloat(minP) : undefined,
-      maxPrice: maxP ? parseFloat(maxP) : undefined,
-      search: searchQ || undefined,
-      color: colorP || undefined,
-      size: sizeP || undefined,
-      fit: searchParams.get('fit') || undefined,
-      fabric: searchParams.get('fabric') || undefined,
-      pattern: searchParams.get('pattern') || undefined,
-      occasion: searchParams.get('occasion') || undefined,
-      minRating: searchParams.get('minRating') ? parseFloat(searchParams.get('minRating') as string) : undefined,
-      minDiscount: searchParams.get('minDiscount') ? parseFloat(searchParams.get('minDiscount') as string) : undefined,
-      inStock: searchParams.get('inStock') === 'true' ? true : undefined,
-      badge: searchParams.get('badge') || undefined,
-      sort: searchParams.get('sort') || 'createdAt',
-      order: (searchParams.get('order') as any) || 'desc',
-      status: 'active',
-    };
+    const filters = buildFilters(parseInt(searchParams.get('page') || '1', 10));
 
     const reqId = ++fetchSeq.current;
     setLoading(true);
@@ -286,6 +328,17 @@ export function ProductsListingClient({
         params.delete(key);
       }
     });
+
+    // Filter usage analytics: helps decide which facets deserve prominence.
+    const filterKeys = new Set(['category','minPrice','maxPrice','color','size','fit','fabric','pattern','occasion','badge','minRating','minDiscount','inStock']);
+    const changedFilters = Object.fromEntries(
+      Object.entries(newParams).filter(([key, value]) => filterKeys.has(key) && value !== undefined)
+    );
+    if (Object.keys(changedFilters).length > 0) {
+      import('@/lib/analytics')
+        .then((m) => m.track('filter_applied', { page: 'product_listing', ...changedFilters }))
+        .catch(() => {});
+    }
 
     // replace (not push) + scroll:false keeps filter clicks instant and avoids
     // history spam + full server reload storms on every size/color toggle.
@@ -375,6 +428,37 @@ export function ProductsListingClient({
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const prefetchPage = (page: number) => {
+    if (page < 1 || page > pagination.pages) return;
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('page', String(page));
+    router.prefetch(`/products?${params.toString()}`);
+  };
+
+  const handleLoadMore = async () => {
+    if (loadingMore || pagination.page >= pagination.pages) return;
+    const nextPage = pagination.page + 1;
+    setLoadingMore(true);
+    try {
+      const response = await productsApi.getProducts(buildFilters(nextPage));
+      const incoming = response.data || [];
+      setProducts((prev) => {
+        const seen = new Set(prev.map((p) => p._id));
+        return [...prev, ...incoming.filter((p) => !seen.has(p._id))];
+      });
+      setPagination((prev) => ({ ...prev, ...(response.pagination || {}), page: nextPage }));
+    } catch (error: any) {
+      if (error?.response?.status === 429) return;
+      toast({
+        title: 'Could not load more products',
+        description: getErrorMessage(error) || 'Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
   // Keyboard shortcuts listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -393,6 +477,8 @@ export function ProductsListingClient({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
+
+  // Focus trap + Escape handling live in useFocusTrap above.
 
   const activeCategoryObj = categories.find((c) => c._id === selectedCategory || c.slug === selectedCategory);
   const currentSearchTerm = searchParams.get('search');
@@ -413,7 +499,44 @@ export function ProductsListingClient({
     currentSearchTerm
   );
 
-  const chipCls = 'bg-white dark:bg-slate-900 border-amber-400 text-slate-800 dark:text-slate-200 text-xs font-semibold gap-1';
+  const activeFilterCount =
+    (selectedCategory ? 1 : 0) +
+    (searchParams.get('minPrice') ? 1 : 0) +
+    (searchParams.get('maxPrice') ? 1 : 0) +
+    selectedSizes.length +
+    selectedColors.length +
+    selectedFits.length +
+    selectedFabrics.length +
+    selectedPatterns.length +
+    selectedOccasions.length +
+    selectedBadges.length +
+    (minRating ? 1 : 0) +
+    (minDiscount ? 1 : 0) +
+    (inStockOnly ? 1 : 0) +
+    (currentSearchTerm ? 1 : 0);
+
+  const activeChips: Array<{ key: string; label: string; value: string; onRemove: () => void }> = [
+    ...(activeCategoryObj
+      ? [{ key: 'category', label: 'Category', value: activeCategoryObj.name, onRemove: () => handleCategorySelect('') }]
+      : []),
+    ...(searchParams.get('minPrice')
+      ? [{ key: 'min', label: 'Min', value: `₹${searchParams.get('minPrice')}`, onRemove: () => updateURL({ minPrice: undefined, page: '1' }) }]
+      : []),
+    ...(searchParams.get('maxPrice')
+      ? [{ key: 'max', label: 'Max', value: `₹${searchParams.get('maxPrice')}`, onRemove: () => updateURL({ maxPrice: undefined, page: '1' }) }]
+      : []),
+    ...selectedSizes.map((sz) => ({ key: `size-${sz}`, label: 'Size', value: sz, onRemove: () => handleSizeToggle(sz) })),
+    ...selectedColors.map((col) => ({ key: `color-${col}`, label: 'Colour', value: col, onRemove: () => handleColorToggle(col) })),
+    ...selectedFits.map((v) => ({ key: `fit-${v}`, label: 'Fit', value: v, onRemove: () => handleMultiToggle('fit', selectedFits, setSelectedFits, v) })),
+    ...selectedFabrics.map((v) => ({ key: `fabric-${v}`, label: 'Fabric', value: v, onRemove: () => handleMultiToggle('fabric', selectedFabrics, setSelectedFabrics, v) })),
+    ...selectedPatterns.map((v) => ({ key: `pattern-${v}`, label: 'Pattern', value: v, onRemove: () => handleMultiToggle('pattern', selectedPatterns, setSelectedPatterns, v) })),
+    ...selectedOccasions.map((v) => ({ key: `occasion-${v}`, label: 'For', value: v, onRemove: () => handleMultiToggle('occasion', selectedOccasions, setSelectedOccasions, v) })),
+    ...selectedBadges.map((v) => ({ key: `badge-${v}`, label: 'Badge', value: v, onRemove: () => handleMultiToggle('badge', selectedBadges, setSelectedBadges, v) })),
+    ...(minRating ? [{ key: 'rating', label: 'Rating', value: `${minRating}★+`, onRemove: () => { setMinRating(''); updateURL({ minRating: undefined, page: '1' }); } }] : []),
+    ...(minDiscount ? [{ key: 'discount', label: 'Discount', value: `${minDiscount}%+`, onRemove: () => { setMinDiscount(''); updateURL({ minDiscount: undefined, page: '1' }); } }] : []),
+    ...(inStockOnly ? [{ key: 'stock', label: 'Stock', value: 'In stock', onRemove: () => { setInStockOnly(false); updateURL({ inStock: undefined, page: '1' }); } }] : []),
+  ];
+
 
   const PRICE_PRESETS = [
     { label: 'Under ₹500', max: 500 },
@@ -422,11 +545,12 @@ export function ProductsListingClient({
     { label: 'Above ₹2,000', min: 2000 },
   ];
 
-  // Best-practice sidebar: EVERY section is an independent accordion item
-  // (type="multiple") so any/all can collapse — fixes "only one dropdown collapses".
-  // All attribute groups always render (with fallbacks) — fixes "options missed".
+  // Best-practice sidebar: ONE accordion open at a time (type="single" collapsible)
+  // so the panel stays compact and the shopper never scrolls past walls of options.
+  // Every section carries the same amber icon treatment for visual rhythm.
   const SidebarContent = () => {
     const sectionLabel = 'text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5';
+    const sectionIcon = 'w-3.5 h-3.5 text-amber-500 shrink-0';
     const pill = (active: boolean) =>
       cn(
         'px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all',
@@ -434,6 +558,10 @@ export function ProductsListingClient({
           ? 'border-amber-500 bg-amber-500/20 text-amber-700 dark:text-amber-300 font-bold'
           : 'border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:border-slate-400'
       );
+    const filteredCategories = categories.filter((cat) =>
+      cat.name.toLowerCase().includes(categoryQuery.trim().toLowerCase())
+    );
+    const visibleCategories = showAllCategories ? filteredCategories : filteredCategories.slice(0, 8);
     return (
     <div className="max-h-[calc(100vh-7rem)] overflow-y-auto pr-1.5 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700">
       {/* Header */}
@@ -453,16 +581,30 @@ export function ProductsListingClient({
         )}
       </div>
 
-      <Accordion type="multiple" defaultValue={['cat', 'price', 'size', 'color', 'fit', 'fabric', 'pattern', 'occasion', 'rating', 'badges']} className="w-full">
+      <Accordion
+        type="single"
+        collapsible
+        value={openFilter}
+        onValueChange={setOpenFilter}
+        className="w-full"
+      >
         {/* 1. Categories */}
         <AccordionItem value="cat" className="border-b border-slate-200 dark:border-slate-800">
           <AccordionTrigger className="text-xs font-bold uppercase tracking-wider hover:no-underline py-3">
-            <span className={sectionLabel}><Tag className="w-3.5 h-3.5 text-amber-500" /> Categories ({categories.length})</span>
+            <span className={sectionLabel}><Tag className={sectionIcon} /> Categories{categories.length > 0 ? ` (${categories.length})` : ''}</span>
           </AccordionTrigger>
           <AccordionContent>
             <div className="space-y-1">
+              <Input
+                aria-label="Search categories"
+                value={categoryQuery}
+                onChange={(e) => setCategoryQuery(e.target.value)}
+                placeholder="Search categories…"
+                className="mb-2 h-8 rounded-xl text-xs"
+              />
               <button
                 onClick={() => handleCategorySelect('')}
+                aria-pressed={!selectedCategory}
                 className={cn(
                   'w-full text-left px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center justify-between transition-colors',
                   !selectedCategory
@@ -473,24 +615,48 @@ export function ProductsListingClient({
                 <span>All Categories</span>
                 {!selectedCategory && <Check className="w-3.5 h-3.5" />}
               </button>
-              {categories.map((cat) => {
+              {visibleCategories.map((cat) => {
                 const isSelected = selectedCategory === cat._id || selectedCategory === cat.slug;
+                const count = categoryCounts[cat._id];
+                const disabled = count === 0 && !isSelected;
                 return (
                   <button
                     key={cat._id}
-                    onClick={() => handleCategorySelect(cat._id)}
+                    onClick={() => { if (!disabled) handleCategorySelect(cat._id); }}
+                    aria-pressed={isSelected}
+                    disabled={disabled}
                     className={cn(
-                      'w-full text-left px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center justify-between transition-colors',
-                      isSelected
-                        ? 'bg-amber-500 text-slate-950 font-bold'
-                        : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                      'w-full text-left px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center justify-between gap-2 transition-colors',
+                      disabled
+                        ? 'opacity-45 cursor-not-allowed'
+                        : isSelected
+                          ? 'bg-amber-500 text-slate-950 font-bold'
+                          : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                     )}
                   >
-                    <span>{cat.name}</span>
-                    {isSelected && <Check className="w-3.5 h-3.5" />}
+                    <span className="truncate">{cat.name}</span>
+                    <span className="flex items-center gap-1 shrink-0">
+                      {typeof count === 'number' && (
+                        <span className={cn('text-[10px] font-bold', isSelected ? 'text-slate-900/70' : 'text-slate-400')}>{count}</span>
+                      )}
+                      {isSelected && <Check className="w-3.5 h-3.5" />}
+                    </span>
                   </button>
                 );
               })}
+              {filteredCategories.length > 8 && (
+                <button
+                  onClick={() => setShowAllCategories((v) => !v)}
+                  className="w-full text-left px-3 py-1.5 text-[11px] font-bold text-amber-700 dark:text-amber-400 hover:underline"
+                >
+                  {showAllCategories ? 'Show less' : `Show all ${filteredCategories.length} categories`}
+                </button>
+              )}
+              {filteredCategories.length === 0 && (
+                <p className="px-3 py-2 text-[11px] text-slate-500">
+                  {filtersLoaded ? `No categories match “${categoryQuery}”.` : 'Loading categories…'}
+                </p>
+              )}
             </div>
           </AccordionContent>
         </AccordionItem>
@@ -498,24 +664,76 @@ export function ProductsListingClient({
         {/* 2. Price */}
         <AccordionItem value="price" className="border-b border-slate-200 dark:border-slate-800">
           <AccordionTrigger className="text-xs font-bold uppercase tracking-wider hover:no-underline py-3">
-            <span className={sectionLabel}>💰 Price Range (₹)</span>
+            <span className={sectionLabel}><IndianRupee className={sectionIcon} /> Price Range (₹)</span>
           </AccordionTrigger>
           <AccordionContent>
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-2">
-                {PRICE_PRESETS.map((preset, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => handlePricePreset(preset.min, preset.max)}
-                    className="text-[11px] font-bold p-1.5 rounded-lg border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:border-amber-500 hover:text-amber-500 transition-colors bg-white dark:bg-slate-900"
-                  >
-                    {preset.label}
-                  </button>
-                ))}
+                {PRICE_PRESETS.map((preset, idx) => {
+                  const active =
+                    String(preset.min ?? '') === minPriceInput &&
+                    String(preset.max ?? '') === maxPriceInput;
+                  return (
+                    <button
+                      key={idx}
+                      onClick={() => handlePricePreset(preset.min, preset.max)}
+                      aria-pressed={active}
+                      className={cn(
+                        'text-[11px] font-bold p-1.5 rounded-lg border transition-colors bg-white dark:bg-slate-900',
+                        active
+                          ? 'border-amber-500 bg-amber-500/15 text-amber-800 dark:text-amber-300'
+                          : 'border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:border-amber-500 hover:text-amber-600'
+                      )}
+                    >
+                      {preset.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="space-y-1.5">
+                <label className="flex items-center justify-between text-[10px] font-bold text-slate-500">
+                  <span>Min</span>
+                  <span className="font-mono">₹{Number(minPriceInput) || priceBounds.min}</span>
+                </label>
+                <input
+                  type="range"
+                  aria-label="Minimum price slider"
+                  min={priceBounds.min}
+                  max={priceBounds.max}
+                  step={50}
+                  value={Number(minPriceInput) || priceBounds.min}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    setMinPriceInput(v <= priceBounds.min ? '' : String(v));
+                  }}
+                  onPointerUp={handlePriceApply}
+                  onKeyUp={(e) => { if (e.key === 'Enter') handlePriceApply(); }}
+                  className="w-full accent-amber-500"
+                />
+                <label className="flex items-center justify-between text-[10px] font-bold text-slate-500">
+                  <span>Max</span>
+                  <span className="font-mono">₹{Number(maxPriceInput) || priceBounds.max}</span>
+                </label>
+                <input
+                  type="range"
+                  aria-label="Maximum price slider"
+                  min={priceBounds.min}
+                  max={priceBounds.max}
+                  step={50}
+                  value={Number(maxPriceInput) || priceBounds.max}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    setMaxPriceInput(v >= priceBounds.max ? '' : String(v));
+                  }}
+                  onPointerUp={handlePriceApply}
+                  onKeyUp={(e) => { if (e.key === 'Enter') handlePriceApply(); }}
+                  className="w-full accent-amber-500"
+                />
               </div>
               <div className="flex items-center gap-2">
                 <Input
                   type="number"
+                  aria-label="Minimum price"
                   placeholder="Min ₹"
                   value={minPriceInput}
                   onChange={(e) => setMinPriceInput(e.target.value)}
@@ -525,6 +743,7 @@ export function ProductsListingClient({
                 <span className="text-xs text-slate-400 font-bold">-</span>
                 <Input
                   type="number"
+                  aria-label="Maximum price"
                   placeholder="Max ₹"
                   value={maxPriceInput}
                   onChange={(e) => setMaxPriceInput(e.target.value)}
@@ -546,26 +765,33 @@ export function ProductsListingClient({
         {/* 3. Size */}
         <AccordionItem value="size" className="border-b border-slate-200 dark:border-slate-800">
           <AccordionTrigger className="text-xs font-bold uppercase tracking-wider hover:no-underline py-3">
-            <span className={sectionLabel}><Ruler className="w-3.5 h-3.5 text-amber-500" /> Size {selectedSizes.length > 0 ? `(${selectedSizes.length})` : ''}</span>
+            <span className={sectionLabel}><Ruler className={sectionIcon} /> Size {selectedSizes.length > 0 ? `(${selectedSizes.length})` : ''}</span>
           </AccordionTrigger>
           <AccordionContent>
             <div className="flex flex-wrap gap-1.5">
               {availableSizes.map((sz) => {
                 const isSelected = selectedSizes.includes(sz);
+                const count = sizeCounts[sz];
+                const noStock = count === 0;
                 return (
                   <button
                     key={sz}
                     onClick={() => handleSizeToggle(sz)}
                     aria-pressed={isSelected}
+                    title={typeof count === 'number' ? (count === 0 ? `${sz} — no products` : `${sz} — ${count} products`) : sz}
                     className={cn(
                       'h-8 min-w-[36px] px-2 rounded-lg text-xs font-bold border transition-all flex items-center justify-center gap-1',
-                      isSelected
-                        ? 'bg-amber-500 border-amber-500 text-slate-950 shadow-sm'
-                        : 'border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:border-amber-400'
+                      noStock && !isSelected
+                        ? 'opacity-45 cursor-not-allowed border-slate-200 dark:border-slate-800'
+                        : isSelected
+                          ? 'bg-amber-500 border-amber-500 text-slate-950 shadow-sm'
+                          : 'border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:border-amber-400'
                     )}
+                    disabled={noStock && !isSelected}
                   >
                     <span>{sz}</span>
                     {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                    {!isSelected && typeof count === 'number' && count > 0 && <span className="text-[9px] text-slate-400 font-semibold">{count}</span>}
                   </button>
                 );
               })}
@@ -576,26 +802,33 @@ export function ProductsListingClient({
         {/* 4. Color */}
         <AccordionItem value="color" className="border-b border-slate-200 dark:border-slate-800">
           <AccordionTrigger className="text-xs font-bold uppercase tracking-wider hover:no-underline py-3">
-            <span className={sectionLabel}><Palette className="w-3.5 h-3.5 text-amber-500" /> Color {selectedColors.length > 0 ? `(${selectedColors.length})` : ''}</span>
+            <span className={sectionLabel}><Palette className={sectionIcon} /> Color {selectedColors.length > 0 ? `(${selectedColors.length})` : ''}</span>
           </AccordionTrigger>
           <AccordionContent>
             <div className="flex flex-wrap gap-2">
               {availableColors.map((c) => {
                 const isSelected = selectedColors.includes(c.name);
+                const count = colorCounts[c.name];
+                const noStock = count === 0;
                 return (
                   <button
                     key={c.name}
                     onClick={() => handleColorToggle(c.name)}
                     aria-pressed={isSelected}
+                    disabled={noStock && !isSelected}
+                    title={typeof count === 'number' ? (count === 0 ? `${c.name} — no products` : `${c.name} — ${count} products`) : c.name}
                     className={cn(
                       'flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all',
-                      isSelected
-                        ? 'border-amber-500 bg-amber-500/20 text-amber-700 dark:text-amber-300 font-bold shadow-sm'
-                        : 'border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:border-slate-400'
+                      noStock && !isSelected
+                        ? 'opacity-45 cursor-not-allowed border-slate-200 dark:border-slate-800'
+                        : isSelected
+                          ? 'border-amber-500 bg-amber-500/20 text-amber-700 dark:text-amber-300 font-bold shadow-sm'
+                          : 'border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:border-slate-400'
                     )}
                   >
                     <span className="w-3 h-3 rounded-full border border-slate-400" style={{ backgroundColor: c.hex }} />
                     <span>{c.name}</span>
+                    {!isSelected && typeof count === 'number' && count > 0 && <span className="text-[9px] text-slate-400 font-semibold">{count}</span>}
                     {isSelected && <Check className="w-3 h-3" />}
                   </button>
                 );
@@ -606,14 +839,17 @@ export function ProductsListingClient({
 
         {/* 5-8. Fit / Fabric / Pattern / Occasion — always rendered */}
         {[
-          { title: 'Fit', options: availableFits, key: 'fit' as const, current: selectedFits, set: setSelectedFits },
-          { title: 'Fabric', options: availableFabrics, key: 'fabric' as const, current: selectedFabrics, set: setSelectedFabrics },
-          { title: 'Pattern', options: availablePatterns, key: 'pattern' as const, current: selectedPatterns, set: setSelectedPatterns },
-          { title: 'Occasion', options: availableOccasions, key: 'occasion' as const, current: selectedOccasions, set: setSelectedOccasions },
+          { title: 'Fit', options: availableFits, key: 'fit' as const, current: selectedFits, set: setSelectedFits, Icon: Shirt },
+          { title: 'Fabric', options: availableFabrics, key: 'fabric' as const, current: selectedFabrics, set: setSelectedFabrics, Icon: Layers },
+          { title: 'Pattern', options: availablePatterns, key: 'pattern' as const, current: selectedPatterns, set: setSelectedPatterns, Icon: Shapes },
+          { title: 'Occasion', options: availableOccasions, key: 'occasion' as const, current: selectedOccasions, set: setSelectedOccasions, Icon: PartyPopper },
         ].map((group) => (
           <AccordionItem key={group.key} value={group.key} className="border-b border-slate-200 dark:border-slate-800">
             <AccordionTrigger className="text-xs font-bold uppercase tracking-wider hover:no-underline py-3">
-              <span className={sectionLabel}>{group.title} {group.current.length > 0 ? `(${group.current.length})` : ''}</span>
+              <span className={sectionLabel}>
+                <group.Icon className={sectionIcon} />
+                {group.title} {group.current.length > 0 ? `(${group.current.length})` : ''}
+              </span>
             </AccordionTrigger>
             <AccordionContent>
               <div className="flex flex-wrap gap-1.5">
@@ -638,7 +874,7 @@ export function ProductsListingClient({
         {/* 9. Rating / Discount / Availability */}
         <AccordionItem value="rating" className="border-b border-slate-200 dark:border-slate-800">
           <AccordionTrigger className="text-xs font-bold uppercase tracking-wider hover:no-underline py-3">
-            <span className={sectionLabel}>Rating & Offers</span>
+            <span className={sectionLabel}><Star className={sectionIcon} /> Rating &amp; Offers</span>
           </AccordionTrigger>
           <AccordionContent>
             <div className="space-y-3">
@@ -691,7 +927,7 @@ export function ProductsListingClient({
         {/* 10. Badges */}
         <AccordionItem value="badges" className="border-b-0">
           <AccordionTrigger className="text-xs font-bold uppercase tracking-wider hover:no-underline py-3">
-            <span className={sectionLabel}>Badges {selectedBadges.length > 0 ? `(${selectedBadges.length})` : ''}</span>
+            <span className={sectionLabel}><Award className={sectionIcon} /> Badges {selectedBadges.length > 0 ? `(${selectedBadges.length})` : ''}</span>
           </AccordionTrigger>
           <AccordionContent>
             <div className="flex flex-wrap gap-1.5">
@@ -733,12 +969,17 @@ export function ProductsListingClient({
       {/* Mobile FILTER | SORT bar (doc §7) */}
       <div className="lg:hidden col-span-1 grid grid-cols-2 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden sticky top-16 z-30 bg-white dark:bg-slate-900 shadow-sm">
         <button
+          ref={filterTriggerRef}
           onClick={() => setShowMobileSidebar(true)}
+          aria-expanded={showMobileSidebar}
+          aria-controls="filter-drawer"
           className="py-3 text-xs font-extrabold uppercase tracking-wider flex items-center justify-center gap-2 border-r border-slate-200 dark:border-slate-800"
         >
           <SlidersHorizontal className="w-4 h-4 text-amber-500" />
           Filter
-          {hasActiveFilters && <Badge className="bg-amber-500 text-slate-950 text-[10px]">On</Badge>}
+          {hasActiveFilters && (
+            <Badge className="bg-amber-500 text-slate-950 text-[10px]">{activeFilterCount}</Badge>
+          )}
         </button>
         <select
           value={activeSort}
@@ -775,8 +1016,14 @@ export function ProductsListingClient({
 
       {/* Mobile Slide-out Drawer */}
       {showMobileSidebar && (
-        <div className="fixed inset-0 z-50 flex bg-slate-950/60 backdrop-blur-sm lg:hidden">
-          <div className="relative w-80 max-w-[85vw] bg-white dark:bg-slate-900 h-full p-5 overflow-y-auto shadow-2xl flex flex-col justify-between">
+        <div
+          id="filter-drawer"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Product filters"
+          className="fixed inset-0 z-[60] flex bg-slate-950/60 backdrop-blur-sm lg:hidden"
+        >
+          <div ref={drawerRef} className="relative w-80 max-w-[85vw] bg-white dark:bg-slate-900 h-full p-5 overflow-y-auto shadow-2xl flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-200 dark:border-slate-800">
                 <h4 className="text-sm font-extrabold uppercase tracking-wider text-slate-900 dark:text-slate-100 flex items-center gap-2">
@@ -785,18 +1032,31 @@ export function ProductsListingClient({
                 </h4>
                 <button
                   onClick={() => setShowMobileSidebar(false)}
-                  className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg"
+                  aria-label="Close filters"
+                  className="p-3 -m-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
+              {activeChips.length > 0 && (
+                <div className="mb-3 flex flex-wrap gap-1.5">
+                  {activeChips.map((chip) => (
+                    <ActiveFilterChip
+                      key={`drawer-${chip.key}`}
+                      label={chip.label}
+                      value={chip.value}
+                      onRemove={chip.onRemove}
+                    />
+                  ))}
+                </div>
+              )}
               <SidebarContent />
             </div>
             <Button
               onClick={() => setShowMobileSidebar(false)}
               className="mt-4 w-full bg-amber-500 text-slate-950 font-bold text-xs py-3 rounded-xl hover:bg-amber-400"
             >
-              Apply Filters ({pagination.total} Products)
+              View {pagination.total} results
             </Button>
           </div>
           <div className="flex-1" onClick={() => setShowMobileSidebar(false)} />
@@ -804,7 +1064,7 @@ export function ProductsListingClient({
       )}
 
       {/* Main Grid Content */}
-      <main className="lg:col-span-3 space-y-6">
+      <section aria-label="Product results" className="lg:col-span-3 space-y-6">
         {/* Active Filter Chips Bar */}
         {hasActiveFilters && (
           <div className="flex flex-wrap items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl">
@@ -812,84 +1072,14 @@ export function ProductsListingClient({
               <Sparkles className="w-3.5 h-3.5" />
               Active Filters:
             </span>
-            {activeCategoryObj && (
-              <Badge variant="outline" className="bg-white dark:bg-slate-900 border-amber-400 text-slate-800 dark:text-slate-200 text-xs font-semibold gap-1">
-                Category: {activeCategoryObj.name}
-                <X className="w-3 h-3 cursor-pointer hover:text-rose-500" onClick={() => handleCategorySelect('')} />
-              </Badge>
-            )}
-            {searchParams.get('minPrice') && (
-              <Badge variant="outline" className="bg-white dark:bg-slate-900 border-amber-400 text-slate-800 dark:text-slate-200 text-xs font-semibold gap-1">
-                Min: ₹{searchParams.get('minPrice')}
-                <X className="w-3 h-3 cursor-pointer hover:text-rose-500" onClick={() => updateURL({ minPrice: undefined, page: '1' })} />
-              </Badge>
-            )}
-            {searchParams.get('maxPrice') && (
-              <Badge variant="outline" className="bg-white dark:bg-slate-900 border-amber-400 text-slate-800 dark:text-slate-200 text-xs font-semibold gap-1">
-                Max: ₹{searchParams.get('maxPrice')}
-                <X className="w-3 h-3 cursor-pointer hover:text-rose-500" onClick={() => updateURL({ maxPrice: undefined, page: '1' })} />
-              </Badge>
-            )}
-            {selectedSizes.map((sz) => (
-              <Badge key={sz} variant="outline" className="bg-white dark:bg-slate-900 border-amber-400 text-slate-800 dark:text-slate-200 text-xs font-semibold gap-1">
-                Size: {sz}
-                <X className="w-3 h-3 cursor-pointer hover:text-rose-500" onClick={() => handleSizeToggle(sz)} />
-              </Badge>
+            {activeChips.map((chip) => (
+              <ActiveFilterChip
+                key={chip.key}
+                label={chip.label}
+                value={chip.value}
+                onRemove={chip.onRemove}
+              />
             ))}
-            {selectedColors.map((col) => (
-              <Badge key={col} variant="outline" className={chipCls}>
-                Color: {col}
-                <X className="w-3 h-3 cursor-pointer hover:text-rose-500" onClick={() => handleColorToggle(col)} />
-              </Badge>
-            ))}
-            {selectedFits.map((v) => (
-              <Badge key={`fit-${v}`} variant="outline" className={chipCls}>
-                Fit: {v}
-                <X className="w-3 h-3 cursor-pointer hover:text-rose-500" onClick={() => handleMultiToggle('fit', selectedFits, setSelectedFits, v)} />
-              </Badge>
-            ))}
-            {selectedFabrics.map((v) => (
-              <Badge key={`fabric-${v}`} variant="outline" className={chipCls}>
-                Fabric: {v}
-                <X className="w-3 h-3 cursor-pointer hover:text-rose-500" onClick={() => handleMultiToggle('fabric', selectedFabrics, setSelectedFabrics, v)} />
-              </Badge>
-            ))}
-            {selectedPatterns.map((v) => (
-              <Badge key={`pattern-${v}`} variant="outline" className={chipCls}>
-                Pattern: {v}
-                <X className="w-3 h-3 cursor-pointer hover:text-rose-500" onClick={() => handleMultiToggle('pattern', selectedPatterns, setSelectedPatterns, v)} />
-              </Badge>
-            ))}
-            {selectedOccasions.map((v) => (
-              <Badge key={`occasion-${v}`} variant="outline" className={chipCls}>
-                For: {v}
-                <X className="w-3 h-3 cursor-pointer hover:text-rose-500" onClick={() => handleMultiToggle('occasion', selectedOccasions, setSelectedOccasions, v)} />
-              </Badge>
-            ))}
-            {selectedBadges.map((v) => (
-              <Badge key={`badge-${v}`} variant="outline" className={chipCls}>
-                {v}
-                <X className="w-3 h-3 cursor-pointer hover:text-rose-500" onClick={() => handleMultiToggle('badge', selectedBadges, setSelectedBadges, v)} />
-              </Badge>
-            ))}
-            {minRating && (
-              <Badge variant="outline" className={chipCls}>
-                {minRating}★+
-                <X className="w-3 h-3 cursor-pointer hover:text-rose-500" onClick={() => { setMinRating(''); updateURL({ minRating: undefined, page: '1' }); }} />
-              </Badge>
-            )}
-            {minDiscount && (
-              <Badge variant="outline" className={chipCls}>
-                {minDiscount}%+ off
-                <X className="w-3 h-3 cursor-pointer hover:text-rose-500" onClick={() => { setMinDiscount(''); updateURL({ minDiscount: undefined, page: '1' }); }} />
-              </Badge>
-            )}
-            {inStockOnly && (
-              <Badge variant="outline" className={chipCls}>
-                In stock
-                <X className="w-3 h-3 cursor-pointer hover:text-rose-500" onClick={() => { setInStockOnly(false); updateURL({ inStock: undefined, page: '1' }); }} />
-              </Badge>
-            )}
             <button
               onClick={handleClearAllFilters}
               className="text-xs font-extrabold text-rose-500 hover:underline ml-auto"
@@ -905,19 +1095,19 @@ export function ProductsListingClient({
             <span className="text-xs font-extrabold uppercase tracking-wider text-amber-600 dark:text-amber-400">
               {activeCategoryObj ? activeCategoryObj.name : 'Mentoos Products'}
             </span>
-            <p className="text-sm text-slate-500 dark:text-slate-400 font-medium mt-0.5">
+            <p className="text-sm text-slate-500 dark:text-slate-400 font-medium mt-0.5" aria-live="polite">
               Showing {((pagination.page - 1) * pagination.limit) + 1} to{' '}
               {Math.min(pagination.page * pagination.limit, pagination.total)} of{' '}
               {pagination.total} products
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="hidden lg:flex items-center gap-3">
             <Select
               value={`${searchParams.get('sort') || 'createdAt'}-${searchParams.get('order') || 'desc'}`}
               onValueChange={handleSortChange}
             >
-              <SelectTrigger className="w-[180px] rounded-xl text-xs font-semibold">
+              <SelectTrigger aria-label="Sort products" className="w-[180px] rounded-xl text-xs font-semibold">
                 <SelectValue placeholder="Sort by" />
               </SelectTrigger>
               <SelectContent>
@@ -947,7 +1137,7 @@ export function ProductsListingClient({
         </div>
 
         {/* Product Grid */}
-        {loading ? (
+        {loading && products.length === 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {[...Array(6)].map((_, i) => (
               <div key={i} className="h-80 rounded-2xl bg-slate-100 dark:bg-slate-800 animate-pulse" />
@@ -962,19 +1152,40 @@ export function ProductsListingClient({
             </Button>
           </div>
         ) : (
-          <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="relative">
+            {loading && (
+              <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex justify-center">
+                <span className="rounded-full bg-slate-900/90 px-3 py-1 text-[11px] font-bold text-white shadow-lg">
+                  Updating results…
+                </span>
+              </div>
+            )}
+            <div className={cn('grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6', loading && 'opacity-60')}>
               {products.map((product) => (
                 <ProductCard key={product._id} product={product} />
               ))}
             </div>
 
-            {/* Pagination Controls */}
+            {/* Mobile load-more: append instead of jumping pages */}
+            {pagination.page < pagination.pages && (
+              <div className="pt-6 sm:hidden">
+                <Button
+                  onClick={handleLoadMore}
+                  disabled={loadingMore}
+                  className="w-full rounded-xl bg-amber-500 text-slate-950 font-extrabold text-xs py-3 hover:bg-amber-400 disabled:opacity-60"
+                >
+                  {loadingMore ? 'Loading…' : `Load more products (${Math.max(0, pagination.total - products.length)} left)`}
+                </Button>
+              </div>
+            )}
+
+            {/* Pagination Controls (desktop/tablet) */}
             {pagination.pages > 1 && (
-              <div className="flex items-center justify-center gap-2 pt-6">
+              <div className="hidden sm:flex flex-wrap items-center justify-center gap-2 pt-6">
                 <Button
                   variant="outline"
                   onClick={() => handlePageChange(pagination.page - 1)}
+                  onMouseEnter={() => prefetchPage(pagination.page - 1)}
                   disabled={pagination.page === 1}
                   className="rounded-xl text-xs font-bold"
                 >
@@ -999,6 +1210,7 @@ export function ProductsListingClient({
                         key={pageNum}
                         variant={pagination.page === pageNum ? 'default' : 'outline'}
                         onClick={() => handlePageChange(pageNum)}
+                        onMouseEnter={() => prefetchPage(pageNum)}
                         className={cn(
                           'min-w-[36px] h-9 rounded-xl text-xs font-bold',
                           pagination.page === pageNum ? 'bg-amber-500 text-slate-950 font-extrabold' : ''
@@ -1013,6 +1225,7 @@ export function ProductsListingClient({
                 <Button
                   variant="outline"
                   onClick={() => handlePageChange(pagination.page + 1)}
+                  onMouseEnter={() => prefetchPage(pagination.page + 1)}
                   disabled={pagination.page >= pagination.pages}
                   className="rounded-xl text-xs font-bold"
                 >
@@ -1021,9 +1234,9 @@ export function ProductsListingClient({
                 </Button>
               </div>
             )}
-          </>
+          </div>
         )}
-      </main>
+      </section>
 
       <KeyboardShortcutsModal open={shortcutsModalOpen} onOpenChange={setShortcutsModalOpen} />
     </div>

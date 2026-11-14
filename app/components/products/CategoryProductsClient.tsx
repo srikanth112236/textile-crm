@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ProductCard } from './ProductCard';
 import { Button } from '@/components/ui/button';
@@ -24,7 +24,8 @@ import {
   Tag, 
   Palette, 
   Ruler,
-  SlidersHorizontal
+  SlidersHorizontal,
+  IndianRupee
 } from 'lucide-react';
 import { productsApi, ProductFilters } from '@/lib/api/products';
 import { categoriesApi } from '@/lib/api/categories';
@@ -32,6 +33,9 @@ import type { IProduct, ICategory } from '@/lib/api/types';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { KeyboardShortcutsModal } from '@/components/admin/KeyboardShortcutsModal';
+import { ActiveFilterChip } from './ActiveFilterChip';
+import { useFocusTrap } from '@/lib/hooks/useFocusTrap';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 
 interface CategoryProductsClientProps {
   category: ICategory;
@@ -80,6 +84,7 @@ export function CategoryProductsClient({
   const [availableSizes, setAvailableSizes] = useState<string[]>(['S', 'M', 'L', 'XL', 'XXL']);
   const [availableColors, setAvailableColors] = useState<Array<{ name: string; hex: string }>>(FALLBACK_COLORS);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
   const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
 
@@ -92,6 +97,42 @@ export function CategoryProductsClient({
   const [selectedColors, setSelectedColors] = useState<string[]>(
     initialSearchParams.color ? initialSearchParams.color.split(',').filter(Boolean) : []
   );
+  const [sizeCounts, setSizeCounts] = useState<Record<string, number>>({});
+  const [colorCounts, setColorCounts] = useState<Record<string, number>>({});
+  const [priceBounds, setPriceBounds] = useState({ min: 0, max: 5000 });
+  const [categoryQuery, setCategoryQuery] = useState('');
+  const [showAllCategories, setShowAllCategories] = useState(false);
+  const [filtersLoaded, setFiltersLoaded] = useState(false);
+  // Controlled open panel: survives re-renders after a filter updates the URL,
+  // and enforces one-open-at-a-time across the whole rail.
+  const [openFilter, setOpenFilter] = useState('cat');
+  const drawerRef = useRef<HTMLDivElement>(null);
+  const filterTriggerRef = useRef<HTMLButtonElement>(null);
+  const skippedFirstFetch = useRef(false);
+
+  useFocusTrap(showMobileSidebar, drawerRef, () => {
+    setShowMobileSidebar(false);
+    filterTriggerRef.current?.focus();
+  });
+
+  const buildFilters = (page: number): ProductFilters => {
+    const minP = currentSearchParams.get('minPrice') || '';
+    const maxP = currentSearchParams.get('maxPrice') || '';
+    const colorP = currentSearchParams.get('color') || '';
+    const sizeP = currentSearchParams.get('size') || '';
+    return {
+      page,
+      limit: 20,
+      category: category._id,
+      minPrice: minP ? parseFloat(minP) : undefined,
+      maxPrice: maxP ? parseFloat(maxP) : undefined,
+      color: colorP || undefined,
+      size: sizeP || undefined,
+      sort: currentSearchParams.get('sort') || 'createdAt',
+      order: (currentSearchParams.get('order') as any) || 'desc',
+      status: 'active',
+    };
+  };
 
   // Load dynamic filter metadata for this specific category
   useEffect(() => {
@@ -108,9 +149,16 @@ export function CategoryProductsClient({
           if (res.data.colors && res.data.colors.length > 0) {
             setAvailableColors(res.data.colors);
           }
+          setSizeCounts(res.data.sizeCounts || {});
+          setColorCounts(res.data.colorCounts || {});
+          if (typeof res.data.minPrice === 'number' && typeof res.data.maxPrice === 'number') {
+            setPriceBounds({ min: res.data.minPrice, max: res.data.maxPrice });
+          }
         }
       } catch (err) {
         console.error('Failed to load category dynamic filters:', err);
+      } finally {
+        setFiltersLoaded(true);
       }
     }
     loadDynamicFilters();
@@ -118,6 +166,11 @@ export function CategoryProductsClient({
 
   // Synchronize state when URL query params change
   useEffect(() => {
+    // SSR already rendered this exact URL's data; skip the duplicate first fetch.
+    if (!skippedFirstFetch.current) {
+      skippedFirstFetch.current = true;
+      return;
+    }
     const minP = currentSearchParams.get('minPrice') || '';
     const maxP = currentSearchParams.get('maxPrice') || '';
     const colorP = currentSearchParams.get('color') || '';
@@ -128,18 +181,7 @@ export function CategoryProductsClient({
     setSelectedColors(colorP ? colorP.split(',').filter(Boolean) : []);
     setSelectedSizes(sizeP ? sizeP.split(',').filter(Boolean) : []);
 
-    const filters: ProductFilters = {
-      page: parseInt(currentSearchParams.get('page') || '1', 10),
-      limit: 20,
-      category: category._id,
-      minPrice: minP ? parseFloat(minP) : undefined,
-      maxPrice: maxP ? parseFloat(maxP) : undefined,
-      color: colorP || undefined,
-      size: sizeP || undefined,
-      sort: currentSearchParams.get('sort') || 'createdAt',
-      order: (currentSearchParams.get('order') as any) || 'desc',
-      status: 'active',
-    };
+    const filters = buildFilters(parseInt(currentSearchParams.get('page') || '1', 10));
 
     fetchProducts(filters);
   }, [currentSearchParams, category._id]);
@@ -173,7 +215,17 @@ export function CategoryProductsClient({
       }
     });
 
-    router.push(`/categories/${category.slug}?${params.toString()}`);
+    const filterKeys = new Set(['minPrice','maxPrice','color','size']);
+    const changedFilters = Object.fromEntries(
+      Object.entries(newParams).filter(([key, value]) => filterKeys.has(key) && value !== undefined)
+    );
+    if (Object.keys(changedFilters).length > 0) {
+      import('@/lib/analytics')
+        .then((m) => m.track('filter_applied', { page: 'category', category: category.slug, ...changedFilters }))
+        .catch(() => {});
+    }
+
+    router.replace(`/categories/${category.slug}?${params.toString()}`, { scroll: false });
   };
 
   const handlePriceApply = () => {
@@ -230,6 +282,47 @@ export function CategoryProductsClient({
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const prefetchPage = (page: number) => {
+    if (page < 1 || page > pagination.pages) return;
+    const params = new URLSearchParams(currentSearchParams.toString());
+    params.set('page', String(page));
+    router.prefetch(`/categories/${category.slug}?${params.toString()}`);
+  };
+
+  const handleLoadMore = async () => {
+    if (loadingMore || pagination.page >= pagination.pages) return;
+    const nextPage = pagination.page + 1;
+    setLoadingMore(true);
+    try {
+      const response = await productsApi.getProducts(buildFilters(nextPage));
+      const incoming = response.data || [];
+      setProducts((prev) => {
+        const seen = new Set(prev.map((p) => p._id));
+        return [...prev, ...incoming.filter((p) => !seen.has(p._id))];
+      });
+      setPagination((prev) => ({ ...prev, ...(response.pagination || {}), page: nextPage }));
+    } catch {
+      toast({
+        title: 'Could not load more products',
+        description: 'Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
+  const activeChips: Array<{ key: string; label: string; value: string; onRemove: () => void }> = [
+    ...(currentSearchParams.get('minPrice')
+      ? [{ key: 'min', label: 'Min', value: `₹${currentSearchParams.get('minPrice')}`, onRemove: () => updateURL({ minPrice: undefined, page: '1' }) }]
+      : []),
+    ...(currentSearchParams.get('maxPrice')
+      ? [{ key: 'max', label: 'Max', value: `₹${currentSearchParams.get('maxPrice')}`, onRemove: () => updateURL({ maxPrice: undefined, page: '1' }) }]
+      : []),
+    ...selectedSizes.map((sz) => ({ key: `size-${sz}`, label: 'Size', value: sz, onRemove: () => handleSizeToggle(sz) })),
+    ...selectedColors.map((col) => ({ key: `color-${col}`, label: 'Colour', value: col, onRemove: () => handleColorToggle(col) })),
+  ];
+
   // Keyboard shortcuts listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -249,12 +342,20 @@ export function CategoryProductsClient({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  // Focus trap + Escape handling live in useFocusTrap above.
+
   const hasActiveFilters = Boolean(
     currentSearchParams.get('minPrice') ||
     currentSearchParams.get('maxPrice') ||
     selectedSizes.length > 0 ||
     selectedColors.length > 0
   );
+
+  const activeFilterCount =
+    (currentSearchParams.get('minPrice') ? 1 : 0) +
+    (currentSearchParams.get('maxPrice') ? 1 : 0) +
+    selectedSizes.length +
+    selectedColors.length;
 
   const PRICE_PRESETS = [
     { label: 'Under ₹500', max: 500 },
@@ -265,7 +366,7 @@ export function CategoryProductsClient({
 
   // Internally Scrollable Sidebar Content
   const SidebarContent = () => (
-    <div className="space-y-6 max-h-[calc(100vh-7rem)] overflow-y-auto pr-1.5 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700">
+    <div className="max-h-[calc(100vh-7rem)] overflow-y-auto pr-1.5 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700">
       {/* Header */}
       <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800 sticky top-0 bg-slate-50/90 dark:bg-slate-900/90 backdrop-blur-sm z-10">
         <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
@@ -283,25 +384,47 @@ export function CategoryProductsClient({
         )}
       </div>
 
+      {/* One accordion open at a time keeps the rail compact and scannable. */}
+      <Accordion
+        type="single"
+        collapsible
+        value={openFilter}
+        onValueChange={setOpenFilter}
+        className="w-full"
+      >
       {/* Categories Navigation */}
-      <div className="space-y-2">
-        <label className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-          <Tag className="w-3.5 h-3.5 text-amber-500" />
-          All Categories
-        </label>
+      <AccordionItem value="cat" className="border-b border-slate-200 dark:border-slate-800">
+        <AccordionTrigger className="text-xs font-bold uppercase tracking-wider hover:no-underline py-3">
+          <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+            <Tag className="w-3.5 h-3.5 text-amber-500" />
+            All Categories
+          </span>
+        </AccordionTrigger>
+        <AccordionContent>
         <div className="space-y-1">
+          <Input
+            aria-label="Search categories"
+            value={categoryQuery}
+            onChange={(e) => setCategoryQuery(e.target.value)}
+            placeholder="Search categories…"
+            className="mb-2 h-8 rounded-xl text-xs"
+          />
           <button
             onClick={() => router.push('/products')}
             className="w-full text-left px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
           >
             All Products
           </button>
-          {categories.map((cat) => {
+          {categories
+            .filter((cat) => cat.name.toLowerCase().includes(categoryQuery.trim().toLowerCase()))
+            .slice(0, showAllCategories ? undefined : 8)
+            .map((cat) => {
             const isCurrent = cat.slug === category.slug;
             return (
               <button
                 key={cat._id}
                 onClick={() => router.push(`/categories/${cat.slug}`)}
+                aria-current={isCurrent ? 'page' : undefined}
                 className={cn(
                   'w-full text-left px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center justify-between transition-colors',
                   isCurrent
@@ -314,28 +437,99 @@ export function CategoryProductsClient({
               </button>
             );
           })}
+          {categories.length === 0 && (
+            <p className="px-3 py-2 text-[11px] text-slate-500">
+              {filtersLoaded ? 'No categories available.' : 'Loading categories…'}
+            </p>
+          )}
+          {categories.length > 8 && (
+            <button
+              onClick={() => setShowAllCategories((v) => !v)}
+              className="w-full text-left px-3 py-1.5 text-[11px] font-bold text-amber-700 dark:text-amber-400 hover:underline"
+            >
+              {showAllCategories ? 'Show less' : `Show all ${categories.length} categories`}
+            </button>
+          )}
         </div>
-      </div>
+        </AccordionContent>
+      </AccordionItem>
 
       {/* Price Range */}
-      <div className="space-y-3 pt-3 border-t border-slate-200 dark:border-slate-800">
-        <label className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-          💰 Price Range (₹)
-        </label>
+      <AccordionItem value="price" className="border-b border-slate-200 dark:border-slate-800">
+        <AccordionTrigger className="text-xs font-bold uppercase tracking-wider hover:no-underline py-3">
+          <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+            <IndianRupee className="w-3.5 h-3.5 text-amber-500" />
+            Price Range (₹)
+          </span>
+        </AccordionTrigger>
+        <AccordionContent>
+        <div className="space-y-3">
         <div className="grid grid-cols-2 gap-2">
-          {PRICE_PRESETS.map((preset, idx) => (
-            <button
-              key={idx}
-              onClick={() => handlePricePreset(preset.min, preset.max)}
-              className="text-[11px] font-bold p-1.5 rounded-lg border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:border-amber-500 hover:text-amber-500 transition-colors bg-white dark:bg-slate-900"
-            >
-              {preset.label}
-            </button>
-          ))}
+          {PRICE_PRESETS.map((preset, idx) => {
+            const active =
+              String(preset.min ?? '') === minPriceInput &&
+              String(preset.max ?? '') === maxPriceInput;
+            return (
+              <button
+                key={idx}
+                onClick={() => handlePricePreset(preset.min, preset.max)}
+                aria-pressed={active}
+                className={cn(
+                  'text-[11px] font-bold p-1.5 rounded-lg border transition-colors bg-white dark:bg-slate-900',
+                  active
+                    ? 'border-amber-500 bg-amber-500/15 text-amber-800 dark:text-amber-300'
+                    : 'border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:border-amber-500 hover:text-amber-600'
+                )}
+              >
+                {preset.label}
+              </button>
+            );
+          })}
+        </div>
+        <div className="space-y-1.5">
+          <label className="flex items-center justify-between text-[10px] font-bold text-slate-500">
+            <span>Min</span>
+            <span className="font-mono">₹{Number(minPriceInput) || priceBounds.min}</span>
+          </label>
+          <input
+            type="range"
+            aria-label="Minimum price slider"
+            min={priceBounds.min}
+            max={priceBounds.max}
+            step={50}
+            value={Number(minPriceInput) || priceBounds.min}
+            onChange={(e) => {
+              const v = Number(e.target.value);
+              setMinPriceInput(v <= priceBounds.min ? '' : String(v));
+            }}
+            onPointerUp={handlePriceApply}
+            onKeyUp={(e) => { if (e.key === 'Enter') handlePriceApply(); }}
+            className="w-full accent-amber-500"
+          />
+          <label className="flex items-center justify-between text-[10px] font-bold text-slate-500">
+            <span>Max</span>
+            <span className="font-mono">₹{Number(maxPriceInput) || priceBounds.max}</span>
+          </label>
+          <input
+            type="range"
+            aria-label="Maximum price slider"
+            min={priceBounds.min}
+            max={priceBounds.max}
+            step={50}
+            value={Number(maxPriceInput) || priceBounds.max}
+            onChange={(e) => {
+              const v = Number(e.target.value);
+              setMaxPriceInput(v >= priceBounds.max ? '' : String(v));
+            }}
+            onPointerUp={handlePriceApply}
+            onKeyUp={(e) => { if (e.key === 'Enter') handlePriceApply(); }}
+            className="w-full accent-amber-500"
+          />
         </div>
         <div className="flex items-center gap-2">
           <Input
             type="number"
+            aria-label="Minimum price"
             placeholder="Min ₹"
             value={minPriceInput}
             onChange={(e) => setMinPriceInput(e.target.value)}
@@ -344,6 +538,7 @@ export function CategoryProductsClient({
           <span className="text-xs text-slate-400 font-bold">-</span>
           <Input
             type="number"
+            aria-label="Maximum price"
             placeholder="Max ₹"
             value={maxPriceInput}
             onChange={(e) => setMaxPriceInput(e.target.value)}
@@ -357,68 +552,95 @@ export function CategoryProductsClient({
             Go
           </Button>
         </div>
-      </div>
+        </div>
+        </AccordionContent>
+      </AccordionItem>
 
       {/* Multi-Select Sizes Selector */}
       {availableSizes.length > 0 && (
-        <div className="space-y-2 pt-3 border-t border-slate-200 dark:border-slate-800">
-          <label className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-            <Ruler className="w-3.5 h-3.5 text-amber-500" />
-            Available Sizes ({availableSizes.length})
-          </label>
+        <AccordionItem value="size" className="border-b border-slate-200 dark:border-slate-800">
+          <AccordionTrigger className="text-xs font-bold uppercase tracking-wider hover:no-underline py-3">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+              <Ruler className="w-3.5 h-3.5 text-amber-500" />
+              Size {selectedSizes.length > 0 ? `(${selectedSizes.length})` : ''}
+            </span>
+          </AccordionTrigger>
+          <AccordionContent>
           <div className="flex flex-wrap gap-1.5">
             {availableSizes.map((sz) => {
               const isSelected = selectedSizes.includes(sz);
+              const count = sizeCounts[sz];
+              const noStock = count === 0;
               return (
                 <button
                   key={sz}
                   onClick={() => handleSizeToggle(sz)}
+                  aria-pressed={isSelected}
+                  disabled={noStock && !isSelected}
+                  title={typeof count === 'number' ? (count === 0 ? `${sz} — no products` : `${sz} — ${count} products`) : sz}
                   className={cn(
                     'h-8 min-w-[36px] px-2 rounded-lg text-xs font-bold border transition-all flex items-center justify-center gap-1',
-                    isSelected
-                      ? 'bg-amber-500 border-amber-500 text-slate-950 shadow-sm'
-                      : 'border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:border-amber-400'
+                    noStock && !isSelected
+                      ? 'opacity-45 cursor-not-allowed border-slate-200 dark:border-slate-800'
+                      : isSelected
+                        ? 'bg-amber-500 border-amber-500 text-slate-950 shadow-sm'
+                        : 'border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:border-amber-400'
                   )}
                 >
                   <span>{sz}</span>
                   {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                  {!isSelected && typeof count === 'number' && count > 0 && <span className="text-[9px] text-slate-400 font-semibold">{count}</span>}
                 </button>
               );
             })}
           </div>
-        </div>
+          </AccordionContent>
+        </AccordionItem>
       )}
 
       {/* Multi-Select Colors Selector */}
       {availableColors.length > 0 && (
-        <div className="space-y-2 pt-3 border-t border-slate-200 dark:border-slate-800">
-          <label className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-            <Palette className="w-3.5 h-3.5 text-amber-500" />
-            Available Colors ({availableColors.length})
-          </label>
+        <AccordionItem value="color" className="border-b-0">
+          <AccordionTrigger className="text-xs font-bold uppercase tracking-wider hover:no-underline py-3">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+              <Palette className="w-3.5 h-3.5 text-amber-500" />
+              Color {selectedColors.length > 0 ? `(${selectedColors.length})` : ''}
+            </span>
+          </AccordionTrigger>
+          <AccordionContent>
           <div className="flex flex-wrap gap-2">
             {availableColors.map((c) => {
               const isSelected = selectedColors.includes(c.name);
+              const count = colorCounts[c.name];
+              const noStock = count === 0;
               return (
                 <button
                   key={c.name}
                   onClick={() => handleColorToggle(c.name)}
+                  aria-pressed={isSelected}
+                  disabled={noStock && !isSelected}
+                  title={typeof count === 'number' ? (count === 0 ? `${c.name} — no products` : `${c.name} — ${count} products`) : c.name}
                   className={cn(
                     'flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all',
-                    isSelected
-                      ? 'border-amber-500 bg-amber-500/20 text-amber-700 dark:text-amber-300 font-bold shadow-sm'
-                      : 'border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:border-slate-400'
+                    noStock && !isSelected
+                      ? 'opacity-45 cursor-not-allowed border-slate-200 dark:border-slate-800'
+                      : isSelected
+                        ? 'border-amber-500 bg-amber-500/20 text-amber-700 dark:text-amber-300 font-bold shadow-sm'
+                        : 'border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:border-slate-400'
                   )}
                 >
                   <span className="w-3 h-3 rounded-full border border-slate-400" style={{ backgroundColor: c.hex }} />
                   <span>{c.name}</span>
+                  {!isSelected && typeof count === 'number' && count > 0 && <span className="text-[9px] text-slate-400 font-semibold">{count}</span>}
                   {isSelected && <Check className="w-3 h-3" />}
                 </button>
               );
             })}
           </div>
-        </div>
+          </AccordionContent>
+        </AccordionItem>
       )}
+      </Accordion>
     </div>
   );
 
@@ -432,7 +654,10 @@ export function CategoryProductsClient({
       {/* Mobile Slide-out Trigger */}
       <div className="lg:hidden flex items-center justify-between col-span-1 pb-4 border-b border-slate-200 dark:border-slate-800">
         <Button
+          ref={filterTriggerRef as any}
           onClick={() => setShowMobileSidebar(true)}
+          aria-expanded={showMobileSidebar}
+          aria-controls="filter-drawer"
           variant="outline"
           className="rounded-xl font-bold text-xs flex items-center gap-2 border-slate-300 dark:border-slate-700"
         >
@@ -440,7 +665,7 @@ export function CategoryProductsClient({
           Filter Products
           {hasActiveFilters && (
             <Badge className="bg-amber-500 text-slate-950 font-bold text-[10px] ml-1">
-              Active
+              {activeFilterCount}
             </Badge>
           )}
         </Button>
@@ -448,8 +673,14 @@ export function CategoryProductsClient({
 
       {/* Mobile Slide-out Drawer */}
       {showMobileSidebar && (
-        <div className="fixed inset-0 z-50 flex bg-slate-950/60 backdrop-blur-sm lg:hidden">
-          <div className="relative w-80 max-w-[85vw] bg-white dark:bg-slate-900 h-full p-5 overflow-y-auto shadow-2xl flex flex-col justify-between">
+        <div
+          id="filter-drawer"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Product filters"
+          className="fixed inset-0 z-[60] flex bg-slate-950/60 backdrop-blur-sm lg:hidden"
+        >
+          <div ref={drawerRef} className="relative w-80 max-w-[85vw] bg-white dark:bg-slate-900 h-full p-5 overflow-y-auto shadow-2xl flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-200 dark:border-slate-800">
                 <h4 className="text-sm font-extrabold uppercase tracking-wider text-slate-900 dark:text-slate-100 flex items-center gap-2">
@@ -458,18 +689,26 @@ export function CategoryProductsClient({
                 </h4>
                 <button
                   onClick={() => setShowMobileSidebar(false)}
-                  className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg"
+                  aria-label="Close filters"
+                  className="p-3 -m-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
+              {activeChips.length > 0 && (
+                <div className="mb-3 flex flex-wrap gap-1.5">
+                  {activeChips.map((chip) => (
+                    <ActiveFilterChip key={`drawer-${chip.key}`} label={chip.label} value={chip.value} onRemove={chip.onRemove} />
+                  ))}
+                </div>
+              )}
               <SidebarContent />
             </div>
             <Button
               onClick={() => setShowMobileSidebar(false)}
               className="mt-4 w-full bg-amber-500 text-slate-950 font-bold text-xs py-3 rounded-xl hover:bg-amber-400"
             >
-              Apply Filters ({pagination.total} Products)
+              View {pagination.total} results
             </Button>
           </div>
           <div className="flex-1" onClick={() => setShowMobileSidebar(false)} />
@@ -477,7 +716,7 @@ export function CategoryProductsClient({
       )}
 
       {/* Main Grid Content */}
-      <main className="lg:col-span-3 space-y-6">
+      <section aria-label="Product results" className="lg:col-span-3 space-y-6">
         {/* Active Filter Chips Bar */}
         {hasActiveFilters && (
           <div className="flex flex-wrap items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl">
@@ -485,29 +724,8 @@ export function CategoryProductsClient({
               <Sparkles className="w-3.5 h-3.5" />
               Active Filters:
             </span>
-            {currentSearchParams.get('minPrice') && (
-              <Badge variant="outline" className="bg-white dark:bg-slate-900 border-amber-400 text-slate-800 dark:text-slate-200 text-xs font-semibold gap-1">
-                Min: ₹{currentSearchParams.get('minPrice')}
-                <X className="w-3 h-3 cursor-pointer hover:text-rose-500" onClick={() => updateURL({ minPrice: undefined, page: '1' })} />
-              </Badge>
-            )}
-            {currentSearchParams.get('maxPrice') && (
-              <Badge variant="outline" className="bg-white dark:bg-slate-900 border-amber-400 text-slate-800 dark:text-slate-200 text-xs font-semibold gap-1">
-                Max: ₹{currentSearchParams.get('maxPrice')}
-                <X className="w-3 h-3 cursor-pointer hover:text-rose-500" onClick={() => updateURL({ maxPrice: undefined, page: '1' })} />
-              </Badge>
-            )}
-            {selectedSizes.map((sz) => (
-              <Badge key={sz} variant="outline" className="bg-white dark:bg-slate-900 border-amber-400 text-slate-800 dark:text-slate-200 text-xs font-semibold gap-1">
-                Size: {sz}
-                <X className="w-3 h-3 cursor-pointer hover:text-rose-500" onClick={() => handleSizeToggle(sz)} />
-              </Badge>
-            ))}
-            {selectedColors.map((col) => (
-              <Badge key={col} variant="outline" className="bg-white dark:bg-slate-900 border-amber-400 text-slate-800 dark:text-slate-200 text-xs font-semibold gap-1">
-                Color: {col}
-                <X className="w-3 h-3 cursor-pointer hover:text-rose-500" onClick={() => handleColorToggle(col)} />
-              </Badge>
+            {activeChips.map((chip) => (
+              <ActiveFilterChip key={chip.key} label={chip.label} value={chip.value} onRemove={chip.onRemove} />
             ))}
             <button
               onClick={handleClearAllFilters}
@@ -524,7 +742,7 @@ export function CategoryProductsClient({
             <span className="text-xs font-extrabold uppercase tracking-wider text-amber-600 dark:text-amber-400">
               {category.name} Catalog
             </span>
-            <p className="text-sm text-slate-500 dark:text-slate-400 font-medium mt-0.5">
+            <p className="text-sm text-slate-500 dark:text-slate-400 font-medium mt-0.5" aria-live="polite">
               Showing {((pagination.page - 1) * pagination.limit) + 1} to{' '}
               {Math.min(pagination.page * pagination.limit, pagination.total)} of{' '}
               {pagination.total} products
@@ -536,7 +754,7 @@ export function CategoryProductsClient({
               value={`${currentSearchParams.get('sort') || 'createdAt'}-${currentSearchParams.get('order') || 'desc'}`}
               onValueChange={handleSortChange}
             >
-              <SelectTrigger className="w-[180px] rounded-xl text-xs font-semibold">
+              <SelectTrigger aria-label="Sort products" className="w-[180px] rounded-xl text-xs font-semibold">
                 <SelectValue placeholder="Sort by" />
               </SelectTrigger>
               <SelectContent>
@@ -563,7 +781,7 @@ export function CategoryProductsClient({
         </div>
 
         {/* Product Grid */}
-        {loading ? (
+        {loading && products.length === 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {[...Array(6)].map((_, i) => (
               <div key={i} className="h-80 rounded-2xl bg-slate-100 dark:bg-slate-800 animate-pulse" />
@@ -578,19 +796,40 @@ export function CategoryProductsClient({
             </Button>
           </div>
         ) : (
-          <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="relative">
+            {loading && (
+              <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex justify-center">
+                <span className="rounded-full bg-slate-900/90 px-3 py-1 text-[11px] font-bold text-white shadow-lg">
+                  Updating results…
+                </span>
+              </div>
+            )}
+            <div className={cn('grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6', loading && 'opacity-60')}>
               {products.map((product) => (
                 <ProductCard key={product._id} product={product} />
               ))}
             </div>
 
-            {/* Pagination Controls */}
+            {/* Mobile load-more: append instead of jumping pages */}
+            {pagination.page < pagination.pages && (
+              <div className="pt-6 sm:hidden">
+                <Button
+                  onClick={handleLoadMore}
+                  disabled={loadingMore}
+                  className="w-full rounded-xl bg-amber-500 text-slate-950 font-extrabold text-xs py-3 hover:bg-amber-400 disabled:opacity-60"
+                >
+                  {loadingMore ? 'Loading…' : `Load more products (${Math.max(0, pagination.total - products.length)} left)`}
+                </Button>
+              </div>
+            )}
+
+            {/* Pagination Controls (desktop/tablet) */}
             {pagination.pages > 1 && (
-              <div className="flex items-center justify-center gap-2 pt-6">
+              <div className="hidden sm:flex flex-wrap items-center justify-center gap-2 pt-6">
                 <Button
                   variant="outline"
                   onClick={() => handlePageChange(pagination.page - 1)}
+                  onMouseEnter={() => prefetchPage(pagination.page - 1)}
                   disabled={pagination.page === 1}
                   className="rounded-xl text-xs font-bold"
                 >
@@ -615,6 +854,7 @@ export function CategoryProductsClient({
                         key={pageNum}
                         variant={pagination.page === pageNum ? 'default' : 'outline'}
                         onClick={() => handlePageChange(pageNum)}
+                        onMouseEnter={() => prefetchPage(pageNum)}
                         className={cn(
                           'min-w-[36px] h-9 rounded-xl text-xs font-bold',
                           pagination.page === pageNum ? 'bg-amber-500 text-slate-950 font-extrabold' : ''
@@ -629,6 +869,7 @@ export function CategoryProductsClient({
                 <Button
                   variant="outline"
                   onClick={() => handlePageChange(pagination.page + 1)}
+                  onMouseEnter={() => prefetchPage(pagination.page + 1)}
                   disabled={pagination.page >= pagination.pages}
                   className="rounded-xl text-xs font-bold"
                 >
@@ -637,9 +878,9 @@ export function CategoryProductsClient({
                 </Button>
               </div>
             )}
-          </>
+          </div>
         )}
-      </main>
+      </section>
 
       <KeyboardShortcutsModal open={shortcutsModalOpen} onOpenChange={setShortcutsModalOpen} />
     </div>

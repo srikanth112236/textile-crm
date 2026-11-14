@@ -92,6 +92,9 @@ export const productsApi = {
       patterns: string[];
       occasions: string[];
       badges: string[];
+      sizeCounts?: Record<string, number>;
+      colorCounts?: Record<string, number>;
+      categoryCounts?: Record<string, number>;
     };
   }> => {
     const params = new URLSearchParams();

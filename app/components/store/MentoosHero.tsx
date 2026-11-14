@@ -62,6 +62,15 @@ const HERO_SLIDES = [
 
 const AUTOPLAY_MS = 7000;
 
+export const HERO_PRELOAD_IMAGE = HERO_SLIDES[0].image;
+
+function heroSrcSet(url: string) {
+  const base = url.replace(/[&?]w=\d+/, '');
+  return [640, 960, 1280, 1600, 1920]
+    .map((w) => `${base}&w=${w} ${w}w`)
+    .join(', ');
+}
+
 export function MentoosHero() {
   const [current, setCurrent] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -119,9 +128,11 @@ export function MentoosHero() {
         >
           <img
             src={s.image}
+            srcSet={heroSrcSet(s.image)}
+            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 100vw, 1280px"
             alt=""
             draggable={false}
-            loading="eager"
+            loading={i === 0 ? 'eager' : 'lazy'}
             decoding="async"
             fetchPriority={i === 0 ? 'high' : 'auto'}
             // Fixed object position: face/subject stays framed, never drifts.

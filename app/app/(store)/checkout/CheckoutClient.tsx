@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCart } from '@/lib/contexts/CartContext';
 import { useAuth } from '@/lib/hooks/useAuth';
@@ -17,6 +17,7 @@ import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import Image from 'next/image';
 import { useToast } from '@/hooks/use-toast';
+import { useShippingQuote } from '@/hooks/useShippingQuote';
 import { formatPrice, getErrorMessage } from '@/lib/utils';
 import {
   CreditCard,
@@ -56,6 +57,7 @@ export default function CheckoutClient() {
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
   const [useNewAddress, setUseNewAddress] = useState(false);
+  const [savingAddress, setSavingAddress] = useState(false);
   const [newAddress, setNewAddress] = useState<Omit<Address, '_id' | 'isDefault'>>({
     street: '',
     city: '',
@@ -71,11 +73,52 @@ export default function CheckoutClient() {
   const [paidAmount, setPaidAmount] = useState(0);
   const [balanceDue, setBalanceDue] = useState(0);
   // Snapshot for the success screen (cart is cleared before confirmation shows)
-  const [placedSummary, setPlacedSummary] = useState<{ count: number; total: number; items: Array<{ name: string; qty: number; subtotal: number; image?: string }> } | null>(null);
+  const [placedSummary, setPlacedSummary] = useState<{
+    count: number;
+    total: number;
+    subtotal?: number;
+    discount?: number;
+    shipping?: number;
+    courier?: string;
+    items: Array<{ name: string; qty: number; subtotal: number; image?: string }>;
+  } | null>(null);
   const [redirectIn, setRedirectIn] = useState(12);
   const [checkoutTracked, setCheckoutTracked] = useState(false);
   const [loyaltyBalance, setLoyaltyBalance] = useState(0);
   const [loyaltyPoints, setLoyaltyPoints] = useState('');
+
+  // PIN used for the live courier quote — whichever address will be shipped to.
+  const shippingPincode = useMemo(() => {
+    const raw = isGuest || useNewAddress
+      ? newAddress.zip
+      : addresses.find((a) => a._id === selectedAddressId)?.zip || '';
+    return (raw || '').replace(/\D/g, '').slice(-6);
+  }, [isGuest, useNewAddress, newAddress.zip, addresses, selectedAddressId]);
+
+  const shippingItems = useMemo(
+    () =>
+      effItems.map((it: any) => ({
+        productId: String(it.productId),
+        quantity: Number(it.quantity) || 1,
+      })),
+    [effItems]
+  );
+
+  const {
+    quote: shippingQuote,
+    loading: shippingLoading,
+    error: shippingError,
+  } = useShippingQuote({
+    pincode: shippingPincode,
+    paymentMethod,
+    orderValue: effTotal,
+    items: shippingItems,
+    enabled: currentStep !== 'confirmation' && shippingItems.length > 0,
+  });
+
+  const shippingCharge = shippingQuote?.available ? shippingQuote.charge : 0;
+  const estimatedTotal = effTotal + shippingCharge;
+  const shippingUnavailable = Boolean(shippingQuote && !shippingQuote.available);
 
   useEffect(() => {
     loadAddresses();
@@ -155,7 +198,7 @@ export default function CheckoutClient() {
     return !!(address.street.trim() && address.city.trim() && address.state.trim() && address.zip.trim() && address.country.trim());
   };
 
-  const handleContinueToPayment = () => {
+  const handleContinueToPayment = async () => {
     if (useNewAddress && !validateAddress(newAddress)) {
       toast({ title: 'Validation Error', description: 'Please fill in all address fields', variant: 'destructive' });
       return;
@@ -165,6 +208,38 @@ export default function CheckoutClient() {
       if (!/^[6-9]\d{9}$/.test(digits)) {
         toast({ title: 'Mobile needed', description: 'Enter a valid 10-digit mobile number for order updates.', variant: 'destructive' });
         return;
+      }
+    }
+    // Make the first entered address the customer's saved default so repeat
+    // purchases can use express checkout.
+    if (!isGuest && useNewAddress) {
+      const norm = (v: string) => v.trim().toLowerCase();
+      const duplicate = addresses.find(
+        (a) =>
+          norm(a.street) === norm(newAddress.street) &&
+          norm(a.city) === norm(newAddress.city) &&
+          norm(a.state) === norm(newAddress.state) &&
+          norm(a.zip) === norm(newAddress.zip) &&
+          norm(a.country) === norm(newAddress.country)
+      );
+      if (duplicate?._id) {
+        setSelectedAddressId(duplicate._id);
+        setUseNewAddress(false);
+      } else {
+        try {
+          setSavingAddress(true);
+          const saved = await profileApi.addAddress({
+            ...newAddress,
+            isDefault: addresses.length === 0 || !addresses.some((a) => a.isDefault),
+          });
+          setAddresses((prev) => [...prev, saved]);
+          if (saved._id) setSelectedAddressId(saved._id);
+          setUseNewAddress(false);
+        } catch {
+          // Keep the inline address; order creation also saves it server-side.
+        } finally {
+          setSavingAddress(false);
+        }
       }
     }
     setCurrentStep('payment');
@@ -297,6 +372,10 @@ export default function CheckoutClient() {
       setPlacedSummary({
         count: effItems.length,
         total: createdTotal,
+        subtotal: created.subtotal ?? effTotal,
+        discount: created.discountAmount,
+        shipping: created.shippingCost,
+        courier: created.shippingCourier,
         items: effItems.slice(0, 3).map((it: any) => ({
           name: it.product?.name || 'Item',
           qty: it.quantity,
@@ -463,7 +542,9 @@ export default function CheckoutClient() {
                 </div>
                 <div className="flex gap-4">
                   <Button variant="outline" asChild><Link href="/cart"><ArrowLeft className="h-4 w-4 mr-2" />Back to Cart</Link></Button>
-                  <Button onClick={handleContinueToPayment} className="flex-1">Continue to Payment<ChevronRight className="h-4 w-4 ml-2" /></Button>
+                  <Button onClick={handleContinueToPayment} disabled={savingAddress} className="flex-1">
+                    {savingAddress ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving address…</> : <>Continue to Payment<ChevronRight className="h-4 w-4 ml-2" /></>}
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -542,7 +623,7 @@ export default function CheckoutClient() {
                 )}
                 <div className="flex gap-2.5">
                   <Button variant="outline" onClick={() => setCurrentStep('payment')}><ArrowLeft className="h-4 w-4 mr-2" />Back</Button>
-                  <Button onClick={handlePlaceOrder} disabled={loading || paying} className="flex-1 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black">
+                  <Button onClick={handlePlaceOrder} disabled={loading || paying || shippingUnavailable} className="flex-1 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black">
                     {(loading || paying) ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />{paying ? 'Waiting for Razorpay…' : 'Placing Order...'}</> : <>{paymentMethod === 'cod' ? 'Place COD Order' : 'Pay & Place Order'}<ChevronRight className="h-4 w-4 ml-2" /></>}
                   </Button>
                 </div>
@@ -583,6 +664,33 @@ export default function CheckoutClient() {
                     </div>
                   )}
                   <Separator />
+                  {placedSummary?.subtotal !== undefined && (
+                    <div className="flex justify-between text-xs">
+                      <span className="text-muted-foreground">Subtotal</span>
+                      <span className="font-semibold">{formatPrice(placedSummary.subtotal)}</span>
+                    </div>
+                  )}
+                  {Boolean(placedSummary?.discount && placedSummary.discount > 0) && (
+                    <div className="flex justify-between text-xs">
+                      <span className="text-muted-foreground">Discount</span>
+                      <span className="font-semibold text-emerald-600">-{formatPrice(placedSummary!.discount!)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">Shipping</span>
+                    <span className="font-semibold">
+                      {placedSummary?.shipping === 0 ? (
+                        <span className="text-emerald-600">FREE</span>
+                      ) : placedSummary?.shipping !== undefined ? (
+                        formatPrice(placedSummary.shipping)
+                      ) : (
+                        '—'
+                      )}
+                      {placedSummary?.courier ? (
+                        <span className="text-muted-foreground font-normal"> · {placedSummary.courier}</span>
+                      ) : null}
+                    </span>
+                  </div>
                   <div className="flex justify-between text-sm"><span className="text-muted-foreground">Order total</span><span className="font-black">{placedSummary ? formatPrice(placedSummary.total) : ''}</span></div>
                   {paidAmount > 0 ? (
                     <div className="flex justify-between text-xs"><span className="text-muted-foreground">Paid online</span><span className="font-bold text-emerald-600">{formatPrice(paidAmount)}{balanceDue > 0 ? ` · balance ${formatPrice(balanceDue)} on delivery` : ' · fully paid'}</span></div>
@@ -622,8 +730,14 @@ export default function CheckoutClient() {
                   ))}
                 </div>
                 <Separator />
-                <div className="flex justify-between text-sm"><span className="text-muted-foreground">Subtotal</span><span>{formatPrice(effTotal)}</span></div>
-                <CouponInput items={effItems.map((it: any) => ({ productId: it.productId, quantity: it.quantity }))} />
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Subtotal</span>
+                  <span>{formatPrice(effTotal)}</span>
+                </div>
+                <CouponInput
+                  items={effItems.map((it: any) => ({ productId: it.productId, quantity: it.quantity }))}
+                  subtotal={effTotal}
+                />
                 {(() => {
                   let coupon = '';
                   try { coupon = localStorage.getItem('mentoos_coupon') || ''; } catch { /* ignore */ }
@@ -634,7 +748,55 @@ export default function CheckoutClient() {
                     </div>
                   ) : null;
                 })()}
-                <div className="text-xs text-muted-foreground">Shipping + COD advance + coupon calculated on order creation.</div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Shipping</span>
+                  <span className="font-semibold text-right">
+                    {shippingLoading ? (
+                      <span className="inline-flex items-center gap-1 text-muted-foreground">
+                        <Loader2 className="h-3 w-3 animate-spin" />Calculating…
+                      </span>
+                    ) : shippingQuote?.available ? (
+                      shippingQuote.freeShipping ? (
+                        <span className="text-emerald-600">FREE</span>
+                      ) : (
+                        formatPrice(shippingQuote.charge)
+                      )
+                    ) : shippingUnavailable ? (
+                      <span className="text-destructive">Not available</span>
+                    ) : shippingError ? (
+                      <span className="text-muted-foreground">—</span>
+                    ) : (
+                      <span className="text-muted-foreground text-xs">Enter delivery PIN</span>
+                    )}
+                  </span>
+                </div>
+                {shippingQuote?.available && shippingQuote.courierName && (
+                  <p className="text-[11px] text-muted-foreground -mt-2">
+                    {shippingQuote.courierName}
+                    {shippingQuote.estimatedDays
+                      ? ` · ${shippingQuote.estimatedDays} days`
+                      : shippingQuote.etd
+                        ? ` · by ${shippingQuote.etd}`
+                        : ''}
+                    {shippingQuote.freeShipping && shippingQuote.actualCost > 0
+                      ? ` · ${formatPrice(shippingQuote.actualCost)} absorbed`
+                      : ''}
+                  </p>
+                )}
+                {shippingError && !shippingLoading && (
+                  <p className="text-[11px] text-muted-foreground">{shippingError} — standard rate will apply.</p>
+                )}
+                {shippingUnavailable && (
+                  <p className="text-[11px] text-destructive">
+                    {shippingQuote?.reason || 'No courier can deliver to this PIN right now.'}
+                  </p>
+                )}
+                <Separator />
+                <div className="flex justify-between text-sm font-black">
+                  <span>Estimated total</span>
+                  <span>{formatPrice(estimatedTotal)}</span>
+                </div>
+                <div className="text-xs text-muted-foreground">Coupon is applied at order creation and can lower the final total.</div>
               </CardContent>
             </Card>
           </div>

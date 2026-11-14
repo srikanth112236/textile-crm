@@ -24,7 +24,7 @@ export default function AdminDashboard() {
           <div key={c.t} className="rounded-xl border bg-card p-5">
             <div className="flex items-center gap-3 mb-3">
               <div className="p-2 rounded-lg bg-primary/10"><c.icon className="h-5 w-5 text-primary" /></div>
-              <div><h3 className="font-semibold text-sm">{c.t}</h3><p className="text-xs text-muted-foreground">{c.d}</p></div>
+              <div><h2 className="font-semibold text-sm">{c.t}</h2><p className="text-xs text-muted-foreground">{c.d}</p></div>
             </div>
             <Link href={c.href}><Button variant="outline" size="sm" className="w-full h-8 text-xs">Open {c.t}</Button></Link>
           </div>

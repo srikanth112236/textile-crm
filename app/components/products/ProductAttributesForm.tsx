@@ -327,6 +327,7 @@ export default function ProductAttributesForm({
             <Label>Volume Pricing (Quantity Discounts)</Label>
             <div className="flex flex-wrap gap-2 mb-2">
               <Input
+                aria-label="Volume pricing minimum quantity"
                 type="number"
                 min="1"
                 placeholder="Min Qty"
@@ -335,6 +336,7 @@ export default function ProductAttributesForm({
                 className="w-24"
               />
               <Input
+                aria-label="Volume pricing maximum quantity"
                 type="number"
                 min="1"
                 placeholder="Max Qty"
@@ -343,6 +345,7 @@ export default function ProductAttributesForm({
                 className="w-24"
               />
               <Input
+                aria-label="Volume pricing price"
                 type="number"
                 step="0.01"
                 min="0"
@@ -364,7 +367,7 @@ export default function ProductAttributesForm({
                       {tier.minQuantity}{tier.maxQuantity ? `-${tier.maxQuantity}` : '+'} units: ${tier.price.toFixed(2)}
                       {tier.discountPercent && <span className="text-green-600 ml-2">({tier.discountPercent}% off)</span>}
                     </span>
-                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => removeVolumeTier(index)}>
+                    <Button variant="ghost" size="icon" aria-label="Remove volume pricing tier" className="h-6 w-6" onClick={() => removeVolumeTier(index)}>
                       <X className="h-3 w-3" />
                     </Button>
                   </div>
@@ -390,24 +393,28 @@ export default function ProductAttributesForm({
           {/* Add new spec */}
           <div className="flex flex-wrap gap-2">
             <Input
+              aria-label="Specification group"
               placeholder="Group (optional)"
               value={newSpec.group || ''}
               onChange={(e) => setNewSpec({ ...newSpec, group: e.target.value })}
               className="w-32"
             />
             <Input
+              aria-label="Specification name"
               placeholder="Name *"
               value={newSpec.name || ''}
               onChange={(e) => setNewSpec({ ...newSpec, name: e.target.value })}
               className="flex-1 min-w-[120px]"
             />
             <Input
+              aria-label="Specification value"
               placeholder="Value *"
               value={newSpec.value || ''}
               onChange={(e) => setNewSpec({ ...newSpec, value: e.target.value })}
               className="flex-1 min-w-[120px]"
             />
             <Input
+              aria-label="Specification unit"
               placeholder="Unit"
               value={newSpec.unit || ''}
               onChange={(e) => setNewSpec({ ...newSpec, unit: e.target.value })}
@@ -451,6 +458,7 @@ export default function ProductAttributesForm({
             <Label>Key Features</Label>
             <div className="flex gap-2">
               <Input
+                aria-label="Add a key feature"
                 placeholder="Add a feature (e.g., Waterproof, Wireless)"
                 value={newFeature}
                 onChange={(e) => setNewFeature(e.target.value)}
@@ -479,6 +487,7 @@ export default function ProductAttributesForm({
             <Label>Materials</Label>
             <div className="flex gap-2">
               <Input
+                aria-label="Add a material"
                 placeholder="Add a material (e.g., Cotton, Stainless Steel)"
                 value={newMaterial}
                 onChange={(e) => setNewMaterial(e.target.value)}
@@ -536,7 +545,7 @@ export default function ProductAttributesForm({
               <div className="space-y-2">
                 <Label>Fit (filter + PDP)</Label>
                 <Select value={fit || ''} onValueChange={(v) => onFitChange(v === '__none' ? '' : v)}>
-                  <SelectTrigger><SelectValue placeholder="Select fit" /></SelectTrigger>
+                  <SelectTrigger aria-label="Fit"><SelectValue placeholder="Select fit" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none">—</SelectItem>
                     {['Slim Fit', 'Regular Fit', 'Relaxed Fit', 'Oversized', 'Loose Fit', 'Skinny', 'Straight'].map((f) => (
@@ -547,16 +556,16 @@ export default function ProductAttributesForm({
               </div>
               <div className="space-y-2">
                 <Label>Fabric</Label>
-                <Input value={fabric || ''} onChange={(e) => onFabricChange(e.target.value)} placeholder="e.g., Pure Cotton, Linen" />
+                <Input aria-label="Fabric" value={fabric || ''} onChange={(e) => onFabricChange(e.target.value)} placeholder="e.g., Pure Cotton, Linen" />
               </div>
               <div className="space-y-2">
                 <Label>Pattern</Label>
-                <Input value={pattern || ''} onChange={(e) => onPatternChange(e.target.value)} placeholder="e.g., Solid, Printed, Striped" />
+                <Input aria-label="Pattern" value={pattern || ''} onChange={(e) => onPatternChange(e.target.value)} placeholder="e.g., Solid, Printed, Striped" />
               </div>
               <div className="space-y-2">
                 <Label>Occasion</Label>
                 <Select value={occasion || ''} onValueChange={(v) => onOccasionChange(v === '__none' ? '' : v)}>
-                  <SelectTrigger><SelectValue placeholder="Select occasion" /></SelectTrigger>
+                  <SelectTrigger aria-label="Occasion"><SelectValue placeholder="Select occasion" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none">—</SelectItem>
                     {['Casual', 'Formal', 'Festive', 'Gym', 'Party', 'Travel'].map((o) => (
@@ -611,6 +620,7 @@ export default function ProductAttributesForm({
               <p className="text-xs text-muted-foreground">Physical product that needs shipping</p>
             </div>
             <Switch
+              aria-label="Requires shipping"
               checked={shipping?.requiresShipping !== false}
               onCheckedChange={(checked) => onShippingChange({ ...shipping, requiresShipping: checked })}
             />
@@ -624,6 +634,7 @@ export default function ProductAttributesForm({
                   <p className="text-xs text-muted-foreground">No shipping charge for this product</p>
                 </div>
                 <Switch
+                  aria-label="Free shipping"
                   checked={shipping?.freeShipping || false}
                   onCheckedChange={(checked) => onShippingChange({ ...shipping, requiresShipping: true, freeShipping: checked })}
                 />
@@ -636,6 +647,7 @@ export default function ProductAttributesForm({
                   </Label>
                   <div className="flex gap-2">
                     <Input
+                      aria-label="Shipping weight"
                       type="number"
                       step="0.01"
                       min="0"
@@ -648,7 +660,7 @@ export default function ProductAttributesForm({
                       value={shipping?.weightUnit || 'g'}
                       onValueChange={(v) => onShippingChange({ ...shipping, requiresShipping: true, weightUnit: v as any })}
                     >
-                      <SelectTrigger className="w-20">
+                      <SelectTrigger aria-label="Weight unit" className="w-20">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -663,6 +675,7 @@ export default function ProductAttributesForm({
                 <div className="space-y-2">
                   <Label>Shipping Class</Label>
                   <Input
+                    aria-label="Shipping class"
                     value={shipping?.shippingClass || ''}
                     onChange={(e) => onShippingChange({ ...shipping, requiresShipping: true, shippingClass: e.target.value })}
                     placeholder="e.g., Standard, Oversized"
@@ -676,6 +689,7 @@ export default function ProductAttributesForm({
                 </Label>
                 <div className="flex flex-wrap gap-2 items-center">
                   <Input
+                    aria-label="Package length"
                     type="number"
                     min="0"
                     step="0.1"
@@ -686,6 +700,7 @@ export default function ProductAttributesForm({
                   />
                   <span>×</span>
                   <Input
+                    aria-label="Package width"
                     type="number"
                     min="0"
                     step="0.1"
@@ -696,6 +711,7 @@ export default function ProductAttributesForm({
                   />
                   <span>×</span>
                   <Input
+                    aria-label="Package height"
                     type="number"
                     min="0"
                     step="0.1"
@@ -708,7 +724,7 @@ export default function ProductAttributesForm({
                     value={shipping?.dimensionUnit || 'cm'}
                     onValueChange={(v) => onShippingChange({ ...shipping, requiresShipping: true, dimensionUnit: v as any })}
                   >
-                    <SelectTrigger className="w-20">
+                    <SelectTrigger aria-label="Dimension unit" className="w-20">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -740,6 +756,7 @@ export default function ProductAttributesForm({
               <p className="text-xs text-muted-foreground">Product is delivered digitally (no shipping)</p>
             </div>
             <Switch
+              aria-label="Digital product"
               checked={digital?.isDigital || false}
               onCheckedChange={(checked) => onDigitalChange(checked ? { ...digital, isDigital: true } : undefined)}
             />
@@ -779,12 +796,14 @@ export default function ProductAttributesForm({
                 <Label>Downloadable Files</Label>
                 <div className="flex gap-2">
                   <Input
+                    aria-label="Digital file name"
                     placeholder="File name"
                     value={newFile.name}
                     onChange={(e) => setNewFile({ ...newFile, name: e.target.value })}
                     className="flex-1"
                   />
                   <Input
+                    aria-label="Digital file URL"
                     placeholder="File URL"
                     value={newFile.url}
                     onChange={(e) => setNewFile({ ...newFile, url: e.target.value })}
@@ -802,7 +821,7 @@ export default function ProductAttributesForm({
                           <Download className="h-4 w-4" />
                           {file.name}
                         </span>
-                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => removeDigitalFile(index)}>
+                        <Button variant="ghost" size="icon" aria-label="Remove digital file" className="h-6 w-6" onClick={() => removeDigitalFile(index)}>
                           <X className="h-3 w-3" />
                         </Button>
                       </div>
@@ -889,6 +908,7 @@ export default function ProductAttributesForm({
               <p className="text-xs text-muted-foreground">Monitor stock levels for this product</p>
             </div>
             <Switch
+              aria-label="Track inventory"
               checked={inventory?.trackInventory !== false}
               onCheckedChange={(checked) => onInventoryChange({ ...inventory, trackInventory: checked, allowBackorder: inventory?.allowBackorder || false })}
             />
@@ -899,6 +919,7 @@ export default function ProductAttributesForm({
               <p className="text-xs text-muted-foreground">Accept orders when out of stock</p>
             </div>
             <Switch
+              aria-label="Allow backorders"
               checked={inventory?.allowBackorder || false}
               onCheckedChange={(checked) => onInventoryChange({ ...inventory, trackInventory: inventory?.trackInventory !== false, allowBackorder: checked })}
             />
@@ -909,6 +930,7 @@ export default function ProductAttributesForm({
               <p className="text-xs text-muted-foreground">Limit to one per order</p>
             </div>
             <Switch
+              aria-label="Sold individually"
               checked={inventory?.soldIndividually || false}
               onCheckedChange={(checked) => onInventoryChange({ ...inventory, trackInventory: inventory?.trackInventory !== false, allowBackorder: inventory?.allowBackorder || false, soldIndividually: checked })}
             />

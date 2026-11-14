@@ -46,7 +46,12 @@ export interface OrderItem {
     images: (string | { url: string; altText?: string })[];
     sku: string;
     description?: string;
+    shortDescription?: string;
     price?: number;
+    compareAtPrice?: number;
+    slug?: string;
+    stock?: number;
+    status?: string;
   };
   quantity: number;
   variations?: Array<{ name: string; value: string }>;
@@ -84,14 +89,20 @@ export interface OrderTimelineEvent {
 
 export interface Order {
   _id: string;
-  userId: string | { name: string; email: string };
+  userId: string | { _id?: string; name: string; email: string; phone?: string };
   orderNumber: string;
   items: OrderItem[];
   total: number;
   subtotal?: number;
   taxAmount?: number;
   discountAmount?: number;
+  discountCode?: string;
   shippingCost?: number;
+  shippingCourier?: string;
+  shippingEtd?: string;
+  shippingRateSource?: 'shiprocket' | 'flat' | 'free';
+  shippingActualCost?: number;
+  shippingQuotedAt?: string;
   shippingAddress: ShippingAddress;
   status: OrderStatus;
   paymentStatus: PaymentStatus;
@@ -138,7 +149,9 @@ export interface Order {
   shiprocketShipmentId?: string;
   shiprocketAWB?: string;
   shiprocketCourier?: string;
+  shiprocketCourierId?: string;
   shiprocketStatus?: string;
+  shiprocketPickupScheduled?: boolean;
   pickupLocation?: string;
   packageWeightG?: number;
   packageLengthCm?: number;
@@ -149,6 +162,8 @@ export interface Order {
 export interface CreateOrderRequest {
   shippingAddressId?: string;
   shippingAddress?: ShippingAddress;
+  /** Express checkout: buy these items directly (cart is left untouched). */
+  items?: Array<{ productId: string; quantity: number; variations?: Array<{ name: string; value: string }> }>;
   paymentMethod?: string;
   discountCode?: string;
   loyaltyPointsRedeemed?: number;
@@ -188,6 +203,21 @@ export interface OrdersResponse {
       pages: number;
     };
   };
+}
+
+export interface OrderStats {
+  total: number;
+  byStatus: Record<string, number>;
+  byPaymentStatus: Record<string, number>;
+  returns: {
+    total: number;
+    byStatus: Record<string, number>;
+  };
+}
+
+export interface OrderStatsResponse {
+  success: boolean;
+  data: OrderStats;
 }
 
 export interface OrderResponse {
@@ -257,7 +287,8 @@ export const getAllOrders = async (
   limit: number = 20,
   status?: OrderStatus,
   paymentStatus?: PaymentStatus,
-  userId?: string
+  userId?: string,
+  search?: string
 ): Promise<OrdersResponse> => {
   const params = new URLSearchParams();
   params.append('page', page.toString());
@@ -271,7 +302,18 @@ export const getAllOrders = async (
   if (userId) {
     params.append('userId', userId);
   }
+  if (search) {
+    params.append('search', search);
+  }
   const response = await apiClient.get<OrdersResponse>(`/orders/admin/all?${params.toString()}`);
+  return response.data;
+};
+
+/**
+ * Get admin order counters (sidebar + status tabs)
+ */
+export const getOrderStats = async (): Promise<OrderStatsResponse> => {
+  const response = await apiClient.get<OrderStatsResponse>('/orders/admin/stats');
   return response.data;
 };
 

@@ -6,6 +6,42 @@ export interface CategoriesResponse {
   data: ICategory[];
 }
 
+/** A category from the tree, flattened, with its nesting level. */
+export interface FlatCategory extends ICategory {
+  depth: number;
+}
+
+/**
+ * The categories endpoint returns a nested tree. Anything that renders a
+ * flat list/select needs to walk it, otherwise only top-level categories
+ * are visible.
+ */
+export function flattenCategories(
+  list: ICategory[],
+  depth = 0,
+  out: FlatCategory[] = []
+): FlatCategory[] {
+  for (const category of list || []) {
+    out.push({ ...category, depth, children: undefined });
+    if (category.children && category.children.length > 0) {
+      flattenCategories(category.children, depth + 1, out);
+    }
+  }
+  return out;
+}
+
+/** Find a category by slug anywhere in the tree (sub-categories included). */
+export function findCategoryBySlug(list: ICategory[], slug: string): ICategory | null {
+  for (const category of list || []) {
+    if (category.slug === slug) return category;
+    if (category.children && category.children.length > 0) {
+      const found = findCategoryBySlug(category.children, slug);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
 export interface CategoryResponse {
   success: boolean;
   data: ICategory;

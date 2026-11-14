@@ -1,5 +1,23 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
+/**
+ * Curated marquee messages shipped as defaults. The storefront always shows at
+ * least 10 scrolling messages, and admins can override/extend this list from
+ * Admin → Settings → Storefront.
+ */
+export const DEFAULT_ANNOUNCEMENTS: string[] = [
+  '🔥 FLAT 15% OFF ON YOUR FIRST ORDER | USE CODE: MENTOOS15',
+  '🚚 FREE EXPRESS SHIPPING ON ALL ORDERS OVER ₹999',
+  '💵 CASH ON DELIVERY AVAILABLE | EASY 7-DAY EXCHANGES',
+  '⚡ NEW ARRIVALS 2026 NOW LIVE — SHOP OVERSIZED TEES & KURTAS',
+  '🎉 FESTIVE DROP: FLAT 20% OFF ETHNIC WEAR | CODE: FESTIVE20',
+  '🛍️ BUY ANY 2 PRODUCTS & SAVE 10% EXTRA | CODE: BUY2GET10',
+  '🏷️ FLAT ₹200 OFF ON ORDERS ABOVE ₹1,499 | CODE: FLAT200',
+  '⭐ 4.8/5 RATED BY 10,000+ HAPPY CUSTOMERS',
+  '🔁 EASY 7-DAY RETURNS & EXCHANGES — NO QUESTIONS ASKED',
+  '📦 SAME-DAY DISPATCH ON ALL ORDERS PLACED BEFORE 2 PM',
+];
+
 // COD slab: different advance amount based on order value
 export interface ICODSlab {
   minOrderValue: number;
@@ -28,7 +46,7 @@ export interface ISettings extends Document {
   };
   shipping: {
     freeShippingThreshold: number; // e.g. 999
-    flatShippingCost: number; // e.g. 49
+    flatShippingCost: number; // 50 | 55 | 60 — charged below the free-shipping threshold
     codShippingExtra: number; // extra fee for COD logistics
     defaultWeightG: number; // fallback 500
     defaultLengthCm: number; // 30
@@ -73,6 +91,7 @@ export interface ISettings extends Document {
       isActive: boolean;
     }>;
     announcement: string;
+    announcements: string[];
   };
   updatedBy?: mongoose.Types.ObjectId;
   createdAt: Date;
@@ -109,7 +128,7 @@ const SettingsSchema = new Schema<ISettings>(
     },
     shipping: {
       freeShippingThreshold: { type: Number, default: 999, min: 0 },
-      flatShippingCost: { type: Number, default: 49, min: 0 },
+      flatShippingCost: { type: Number, default: 50, min: 0 },
       codShippingExtra: { type: Number, default: 0, min: 0 },
       defaultWeightG: { type: Number, default: 500, min: 1 },
       defaultLengthCm: { type: Number, default: 30, min: 1 },
@@ -159,6 +178,16 @@ const SettingsSchema = new Schema<ISettings>(
         default: [],
       },
       announcement: { type: String, default: 'Free shipping on orders over ₹999', trim: true },
+      // Marquee messages. Storefront shows at least 10 (falls back to the
+      // curated defaults when this list is empty).
+      announcements: {
+        type: [String],
+        default: () => [...DEFAULT_ANNOUNCEMENTS],
+        validate: {
+          validator: (list: string[]) => list.length <= 30,
+          message: 'At most 30 announcement messages are allowed',
+        },
+      },
     },
     updatedBy: { type: Schema.Types.ObjectId, ref: 'User' },
   },
@@ -187,7 +216,7 @@ export const DEFAULT_SETTINGS: Omit<ISettings, keyof Document> = {
   },
   shipping: {
     freeShippingThreshold: 999,
-    flatShippingCost: 49,
+    flatShippingCost: 50,
     codShippingExtra: 0,
     defaultWeightG: 500,
     defaultLengthCm: 30,
@@ -226,6 +255,7 @@ export const DEFAULT_SETTINGS: Omit<ISettings, keyof Document> = {
   storefront: {
     banners: [],
     announcement: 'Free shipping on orders over ₹999',
+    announcements: [...DEFAULT_ANNOUNCEMENTS],
   },
 } as unknown as Omit<ISettings, keyof Document>;
 

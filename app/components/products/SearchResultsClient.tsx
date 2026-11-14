@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { ProductCard } from './ProductCard';
 import { Button } from '@/components/ui/button';
@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, SlidersHorizontal } from 'lucide-react';
 import { productsApi, ProductFilters } from '@/lib/api/products';
 import type { IProduct } from '@/lib/api/types';
 import { KeyboardShortcutsModal } from '@/components/admin/KeyboardShortcutsModal';
@@ -31,6 +31,7 @@ interface SearchResultsClientProps {
     page?: string;
     category?: string;
     color?: string;
+    size?: string;
     minPrice?: string;
     maxPrice?: string;
     sort?: string;
@@ -57,6 +58,18 @@ export function SearchResultsClient({
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState(initialSearchParams.q || '');
   const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
+  const [filterMeta, setFilterMeta] = useState<{
+    categories?: Array<{ _id: string; name: string; slug: string }>;
+    colors?: Array<{ name: string; hex: string }>;
+    sizes?: string[];
+  } | null>(null);
+
+  useEffect(() => {
+    productsApi
+      .getFilters()
+      .then((res) => setFilterMeta(res.data))
+      .catch(() => {});
+  }, []);
 
   // Sync when the server re-renders with new ?q/?color/?price params (e.g.
   // SmartSearch "View All" carries color+price). Without this, carried params
@@ -85,6 +98,16 @@ export function SearchResultsClient({
       }
     });
 
+    const filterKeys = new Set(['category','size','color','minPrice','maxPrice']);
+    const changedFilters = Object.fromEntries(
+      Object.entries(newParams).filter(([key, value]) => filterKeys.has(key) && value !== undefined)
+    );
+    if (Object.keys(changedFilters).length > 0) {
+      import('@/lib/analytics')
+        .then((m) => m.track('filter_applied', { page: 'search', query: initialSearchParams.q || '', ...changedFilters }))
+        .catch(() => {});
+    }
+
     router.replace(`/search?${params.toString()}`, { scroll: false } as any);
   };
 
@@ -103,6 +126,7 @@ export function SearchResultsClient({
   };
 
   // Keyboard shortcuts
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
@@ -112,9 +136,8 @@ export function SearchResultsClient({
       // Ctrl/Cmd + F for search focus
       if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
         e.preventDefault();
-        const searchInput = document.getElementById('search-input');
-        if (searchInput) {
-          searchInput.focus();
+        if (searchInputRef.current) {
+          searchInputRef.current.focus();
           toast({
             title: 'Search Focused',
             description: 'Type to search products',
@@ -146,7 +169,8 @@ export function SearchResultsClient({
         <div className="flex-1 relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            id="search-input"
+            ref={searchInputRef}
+            aria-label="Search products"
             placeholder="Search products..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -171,34 +195,109 @@ export function SearchResultsClient({
         </Button>
       </div>
 
-      {/* Active smart-search filters carried from the modal (color/price) */}
-      {(initialSearchParams.color || initialSearchParams.minPrice || initialSearchParams.maxPrice) && (
+      {/* Search filters */}
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <SlidersHorizontal className="h-4 w-4 text-amber-500" />
+        <Select
+          value={initialSearchParams.category || 'all'}
+          onValueChange={(v) => updateURL({ category: v === 'all' ? undefined : v, page: '1' })}
+        >
+          <SelectTrigger aria-label="Filter by category" className="w-[150px] rounded-xl text-xs">
+            <SelectValue placeholder="Category" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All categories</SelectItem>
+            {filterMeta?.categories?.map((cat) => (
+              <SelectItem key={cat._id} value={cat.slug}>{cat.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select
+          value={initialSearchParams.size || 'all'}
+          onValueChange={(v) => updateURL({ size: v === 'all' ? undefined : v, page: '1' })}
+        >
+          <SelectTrigger aria-label="Filter by size" className="w-[110px] rounded-xl text-xs">
+            <SelectValue placeholder="Size" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All sizes</SelectItem>
+            {(filterMeta?.sizes || ['S', 'M', 'L', 'XL', 'XXL']).map((sz) => (
+              <SelectItem key={sz} value={sz}>{sz}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select
+          value={initialSearchParams.color || 'all'}
+          onValueChange={(v) => updateURL({ color: v === 'all' ? undefined : v, page: '1' })}
+        >
+          <SelectTrigger aria-label="Filter by colour" className="w-[130px] rounded-xl text-xs">
+            <SelectValue placeholder="Colour" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All colours</SelectItem>
+            {filterMeta?.colors?.map((c) => (
+              <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {[
+          { label: 'Under ₹500', max: 500 },
+          { label: '₹500–999', min: 500, max: 999 },
+          { label: '₹1,000–1,999', min: 1000, max: 1999 },
+          { label: '₹2,000+', min: 2000 },
+        ].map((preset) => (
+          <button
+            key={preset.label}
+            onClick={() => updateURL({
+              minPrice: preset.min ? String(preset.min) : undefined,
+              maxPrice: preset.max ? String(preset.max) : undefined,
+              page: '1',
+            })}
+            className="rounded-full border border-slate-200 dark:border-slate-800 px-2.5 py-1 text-[11px] font-bold hover:border-amber-500"
+          >
+            {preset.label}
+          </button>
+        ))}
+
+        {(initialSearchParams.category || initialSearchParams.size || initialSearchParams.color || initialSearchParams.minPrice || initialSearchParams.maxPrice) && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => updateURL({ category: undefined, size: undefined, color: undefined, minPrice: undefined, maxPrice: undefined, page: '1' })}
+            className="text-xs font-bold text-rose-600"
+          >
+            Clear filters
+          </Button>
+        )}
+      </div>
+
+      {(initialSearchParams.category || initialSearchParams.size || initialSearchParams.color || initialSearchParams.minPrice || initialSearchParams.maxPrice) && (
         <div className="mb-4 flex flex-wrap items-center gap-2 text-xs">
-          <span className="font-bold text-amber-700">Smart filters:</span>
+          {initialSearchParams.category && (
+            <button onClick={() => updateURL({ category: undefined, page: '1' })} className="rounded-full border border-amber-400 bg-amber-500/10 px-2.5 py-1 font-semibold">
+              {filterMeta?.categories?.find((c) => c.slug === initialSearchParams.category)?.name || initialSearchParams.category} ✕
+            </button>
+          )}
+          {initialSearchParams.size && (
+            <button onClick={() => updateURL({ size: undefined, page: '1' })} className="rounded-full border border-amber-400 bg-amber-500/10 px-2.5 py-1 font-semibold">
+              Size {initialSearchParams.size} ✕
+            </button>
+          )}
           {initialSearchParams.color && (
-            <button
-              onClick={() => updateURL({ color: undefined, page: '1' })}
-              className="px-2.5 py-1 rounded-full border border-amber-400 bg-amber-500/10 font-semibold hover:bg-amber-500/20"
-              title="Clear color filter"
-            >
-              Color: {initialSearchParams.color} ✕
+            <button onClick={() => updateURL({ color: undefined, page: '1' })} className="rounded-full border border-amber-400 bg-amber-500/10 px-2.5 py-1 font-semibold">
+              Colour {initialSearchParams.color} ✕
             </button>
           )}
           {initialSearchParams.minPrice && (
-            <button
-              onClick={() => updateURL({ minPrice: undefined, page: '1' })}
-              className="px-2.5 py-1 rounded-full border border-amber-400 bg-amber-500/10 font-semibold hover:bg-amber-500/20"
-              title="Clear min price"
-            >
+            <button onClick={() => updateURL({ minPrice: undefined, page: '1' })} className="rounded-full border border-amber-400 bg-amber-500/10 px-2.5 py-1 font-semibold">
               Min ₹{initialSearchParams.minPrice} ✕
             </button>
           )}
           {initialSearchParams.maxPrice && (
-            <button
-              onClick={() => updateURL({ maxPrice: undefined, page: '1' })}
-              className="px-2.5 py-1 rounded-full border border-amber-400 bg-amber-500/10 font-semibold hover:bg-amber-500/20"
-              title="Clear max price"
-            >
+            <button onClick={() => updateURL({ maxPrice: undefined, page: '1' })} className="rounded-full border border-amber-400 bg-amber-500/10 px-2.5 py-1 font-semibold">
               Max ₹{initialSearchParams.maxPrice} ✕
             </button>
           )}
@@ -226,7 +325,7 @@ export function SearchResultsClient({
             value={`${initialSearchParams.sort || 'createdAt'}-${initialSearchParams.order || 'desc'}`}
             onValueChange={handleSortChange}
           >
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger aria-label="Sort search results" className="w-[180px]">
               <SelectValue placeholder="Sort by" />
             </SelectTrigger>
             <SelectContent>

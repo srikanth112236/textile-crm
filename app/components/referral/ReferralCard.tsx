@@ -52,7 +52,7 @@ export default function ReferralCard() {
       <CardContent className="space-y-3">
         <div className="flex items-center gap-2">
           <code className="flex-1 text-center font-black tracking-widest bg-muted rounded-lg py-2">{code || '…'}</code>
-          <Button size="sm" variant="outline" onClick={copy} disabled={!code}>
+          <Button size="sm" variant="outline" aria-label={copied ? 'Referral code copied' : 'Copy referral code'} onClick={copy} disabled={!code}>
             {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
           </Button>
         </div>

@@ -14,6 +14,16 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
   AdminTable,
   AdminTableBody,
   AdminTableCell,
@@ -45,6 +55,11 @@ export default function TagsPage() {
     isActive: true,
   });
   const [submitting, setSubmitting] = useState(false);
+  const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; tag: ITag | null }>({
+    open: false,
+    tag: null,
+  });
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (user && (user.role === 'admin' || user.role === 'superadmin')) {
@@ -146,17 +161,18 @@ export default function TagsPage() {
     }
   };
 
-  const handleDelete = async (tag: ITag) => {
-    if (!confirm(`Are you sure you want to delete "${tag.name}"? This will remove it from all products.`)) {
-      return;
-    }
+  const handleDelete = async () => {
+    const tag = deleteDialog.tag;
+    if (!tag) return;
 
+    setDeleting(true);
     try {
       await tagsApi.deleteTag(tag._id);
       toast({
         title: 'Success',
-        description: 'Tag deleted successfully',
+        description: `"${tag.name}" deleted successfully`,
       });
+      setDeleteDialog({ open: false, tag: null });
       fetchTags();
     } catch (error: any) {
       console.error('Failed to delete tag:', error);
@@ -165,6 +181,8 @@ export default function TagsPage() {
         description: error.response?.data?.error || 'Failed to delete tag',
         variant: 'destructive',
       });
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -269,7 +287,7 @@ export default function TagsPage() {
                         label: 'Delete',
                         icon: <Trash2 className="h-3.5 w-3.5 mr-2" />,
                         danger: true,
-                        onSelect: () => handleDelete(tag),
+                        onSelect: () => setDeleteDialog({ open: true, tag }),
                       },
                     ]}
                   />
@@ -356,6 +374,39 @@ export default function TagsPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Delete confirmation */}
+      <AlertDialog
+        open={deleteDialog.open}
+        onOpenChange={(open) => setDeleteDialog((prev) => ({ open, tag: open ? prev.tag : null }))}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Tag</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete &quot;{deleteDialog.tag?.name}&quot;? This will remove it from all
+              products
+              {deleteDialog.tag && deleteDialog.tag.usageCount > 0
+                ? ` (currently used by ${deleteDialog.tag.usageCount} product${deleteDialog.tag.usageCount === 1 ? '' : 's'})`
+                : ''}
+              . This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                handleDelete();
+              }}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

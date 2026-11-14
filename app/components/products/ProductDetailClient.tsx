@@ -33,7 +33,8 @@ import {
   MapPin,
   Bell,
   Play,
-  RotateCcw
+  RotateCcw,
+  Zap
 } from 'lucide-react';
 import type { IProduct } from '@/lib/api/types';
 import { cn, formatPrice, getErrorMessage } from '@/lib/utils';
@@ -43,6 +44,9 @@ import { WishlistButton } from './WishlistButton';
 import { SizeGuideModal } from './SizeGuideModal';
 import { FindMySize } from './FindMySize';
 import { RecentlyViewed } from './RecentlyViewed';
+import { FloatingProductVideo } from './FloatingProductVideo';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/lib/hooks/useAuth';
 import { FrequentlyBoughtTogether } from './FrequentlyBoughtTogether';
 import { CompleteTheLook } from './CompleteTheLook';
 import { trackRecentlyViewed } from '@/lib/recentlyViewed';
@@ -59,11 +63,15 @@ const SIZES = ['S', 'M', 'L', 'XL', 'XXL'];
 
 export function ProductDetailClient({ product }: ProductDetailClientProps) {
   const { toast } = useToast();
+  const router = useRouter();
+  const { isCustomer } = useAuth();
   const { addToCompare, removeFromCompare, isInCompare } = useCompare();
   const isCompared = isInCompare(product._id);
 
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [selectedSize, setSelectedSize] = useState('L');
+  const [selectedColor, setSelectedColor] = useState('');
+  const [hasDefaultAddress, setHasDefaultAddress] = useState(false);
   const [quantity, setQuantity] = useState(1);
   const [pincode, setPincode] = useState('');
   const [pincodeResult, setPincodeResult] = useState<string | null>(null);
@@ -71,6 +79,7 @@ export function ProductDetailClient({ product }: ProductDetailClientProps) {
   const [notifyContact, setNotifyContact] = useState('');
   const [showVideo, setShowVideo] = useState(false);
   const [freeShipThreshold, setFreeShipThreshold] = useState(999);
+  const [flatShippingCost, setFlatShippingCost] = useState(50);
   const [showSizeGuide, setShowSizeGuide] = useState(false);
   const [showFindSize, setShowFindSize] = useState(false);
 
@@ -94,11 +103,58 @@ export function ProductDetailClient({ product }: ProductDetailClientProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [product._id]);
   const categoryName = typeof product.category === 'object' ? (product.category as any)?.name : undefined;
-  const sizeVariations = [{ name: 'Size', value: selectedSize }];
+
+  // Colour is the second variant axis (when the product defines one).
+  const colorAttribute = ((product as any).variantAttributes || []).find(
+    (a: any) => /colo(u)?r/i.test(String(a.name))
+  );
+  const colorButtons: string[] = (colorAttribute?.options || []).map((o: any) => o.value);
+  const colorCodeFor = (value: string): string | undefined =>
+    colorAttribute?.options?.find((o: any) => o.value === value)?.colorCode;
+
+  useEffect(() => {
+    if (colorButtons.length > 0) {
+      setSelectedColor((prev) => (prev && colorButtons.includes(prev) ? prev : colorButtons[0]));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [product._id]);
+
+  const sizeVariations = [
+    { name: 'Size', value: selectedSize },
+    ...(colorAttribute && selectedColor
+      ? [{ name: String(colorAttribute.name || 'Color'), value: selectedColor }]
+      : []),
+  ];
+
+  // Express checkout is offered to returning customers who already have a
+  // saved (default) address.
+  useEffect(() => {
+    if (!isCustomer) {
+      setHasDefaultAddress(false);
+      return;
+    }
+    import('@/lib/api/profile')
+      .then((m) => m.profileApi.getAddresses())
+      .then((list) => setHasDefaultAddress((list || []).some((a) => a.isDefault) || (list || []).length > 0))
+      .catch(() => setHasDefaultAddress(false));
+  }, [isCustomer, product._id]);
+
+  const goToExpressCheckout = () => {
+    const params = new URLSearchParams({
+      product: product._id,
+      qty: String(quantity),
+    });
+    if (selectedSize) params.set('size', selectedSize);
+    if (colorAttribute && selectedColor) params.set('color', selectedColor);
+    router.push(`/checkout/express?${params.toString()}`);
+  };
 
   useEffect(() => {
     import('@/lib/api/settings').then((m) =>
-      m.settingsApi.getPublic().then((s) => setFreeShipThreshold(s.shipping.freeShippingThreshold)).catch(() => {})
+      m.settingsApi.getPublic().then((s) => {
+        setFreeShipThreshold(s.shipping.freeShippingThreshold);
+        if (typeof s.shipping.flatShippingCost === 'number') setFlatShippingCost(s.shipping.flatShippingCost);
+      }).catch(() => {})
     );
     trackRecentlyViewed(product._id);
     import('@/lib/analytics').then((m) => m.funnel.viewItem(product._id, product.name, product.price)).catch(() => {});
@@ -120,6 +176,8 @@ export function ProductDetailClient({ product }: ProductDetailClientProps) {
   const mainImageObj = images[selectedImageIndex];
   const mainImageUrl = typeof mainImageObj === 'string' ? mainImageObj : mainImageObj.url;
   const displayImageUrl = mainImageUrl.includes('/uploads/') ? `/api/images${mainImageUrl}` : mainImageUrl;
+
+  const floatingVideo = (product.videos || []).find((v) => v?.url && v.enabled !== false);
 
   const isOutOfStock = product.stock === 0 || product.status === 'out_of_stock';
   const isLowStock = product.stock > 0 && product.stock <= (product.lowStockThreshold || 10);
@@ -419,7 +477,7 @@ export function ProductDetailClient({ product }: ProductDetailClientProps) {
                 </span>
               )}
             </div>
-            <p className="text-[11px] text-slate-400 mt-1">Inclusive of all taxes. Free shipping on orders over {formatPrice(freeShipThreshold)}.
+            <p className="text-[11px] text-slate-400 mt-1">Inclusive of all taxes. Free shipping on orders over {formatPrice(freeShipThreshold)}{flatShippingCost > 0 ? ` — ${formatPrice(flatShippingCost)} below that` : ''}.
               <button onClick={handlePriceAlert} disabled={priceAlertLoading} className="ml-2 font-bold text-amber-600 hover:underline">
                 {priceAlertLoading ? 'Setting alert…' : '🔔 Notify me on price drop'}
               </button>
@@ -476,12 +534,71 @@ export function ProductDetailClient({ product }: ProductDetailClientProps) {
             )}
           </div>
 
+          {/* Colour Selector */}
+          {colorButtons.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                  Select Colour: <span className="text-amber-500">{selectedColor}</span>
+                </span>
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                {colorButtons.map((color) => {
+                  const code = colorCodeFor(color);
+                  return (
+                    <button
+                      key={color}
+                      onClick={() => setSelectedColor(color)}
+                      title={`Select colour ${color}`}
+                      className={cn(
+                        'h-9 px-3 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5',
+                        selectedColor === color
+                          ? 'bg-slate-900 text-white dark:bg-amber-500 dark:text-slate-950 border-slate-900 dark:border-amber-500 shadow-md'
+                          : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:border-amber-500'
+                      )}
+                    >
+                      {code && (
+                        <span
+                          className="h-3.5 w-3.5 rounded-full border border-black/10"
+                          style={{ backgroundColor: code }}
+                        />
+                      )}
+                      {color}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Express checkout for returning customers with a saved address */}
+          {isCustomer && hasDefaultAddress && !isOutOfStock && (
+            <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-3 flex items-center justify-between gap-3">
+              <div className="flex items-start gap-2 min-w-0">
+                <Zap className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs font-extrabold text-emerald-700 dark:text-emerald-300">Express Checkout available</p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-tight">
+                    Skip the address step — pay with your saved default address.
+                  </p>
+                </div>
+              </div>
+              <Button
+                type="button"
+                onClick={goToExpressCheckout}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shrink-0"
+              >
+                <Zap className="w-3.5 h-3.5 mr-1.5" /> Express
+              </Button>
+            </div>
+          )}
+
           {/* Pincode Delivery Checker */}
           <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
               <MapPin className="w-3.5 h-3.5 text-amber-500" />
               Check Delivery & COD Availability
-            </h4>
+            </h2>
             <form onSubmit={handlePincodeCheck} className="flex gap-2">
               <input
                 type="text"
@@ -509,6 +626,7 @@ export function ProductDetailClient({ product }: ProductDetailClientProps) {
               <div className="flex items-center border border-slate-300 dark:border-slate-700 rounded-xl overflow-hidden bg-white dark:bg-slate-900">
                 <button
                   onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                  aria-label="Decrease quantity"
                   className="px-3 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                 >
                   <Minus className="w-3.5 h-3.5" />
@@ -516,6 +634,7 @@ export function ProductDetailClient({ product }: ProductDetailClientProps) {
                 <span className="px-4 text-xs font-bold text-slate-900 dark:text-slate-100">{quantity}</span>
                 <button
                   onClick={() => setQuantity(quantity + 1)}
+                  aria-label="Increase quantity"
                   className="px-3 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                 >
                   <Plus className="w-3.5 h-3.5" />
@@ -570,7 +689,7 @@ export function ProductDetailClient({ product }: ProductDetailClientProps) {
                 <span>{isCompared ? 'Compared' : 'Compare'}</span>
               </button>
 
-              <Button variant="outline" size="icon" onClick={handleShare} className="rounded-2xl p-4">
+              <Button variant="outline" size="icon" onClick={handleShare} aria-label="Share product" className="rounded-2xl p-4">
                 <Share2 className="w-4 h-4" />
               </Button>
             </div>
@@ -611,7 +730,7 @@ export function ProductDetailClient({ product }: ProductDetailClientProps) {
               <AccordionTrigger className="text-xs font-extrabold uppercase tracking-wider flex items-center gap-1.5"><Truck className="w-3.5 h-3.5 text-amber-500" /> Delivery Information</AccordionTrigger>
               <AccordionContent className="text-xs text-slate-600 dark:text-slate-400 space-y-1">
                 <p>Dispatch in 24–48 hrs. Delivery in 3–5 working days across India.</p>
-                <p>Free shipping on orders over {formatPrice(freeShipThreshold)}. COD available on serviceable pincodes — check above.</p>
+                <p>Free shipping on orders over {formatPrice(freeShipThreshold)}. {flatShippingCost > 0 ? `${formatPrice(flatShippingCost)} shipping applies below that. ` : ''}COD available on serviceable pincodes — check above.</p>
               </AccordionContent>
             </AccordionItem>
             <AccordionItem value="returns">
@@ -681,6 +800,15 @@ export function ProductDetailClient({ product }: ProductDetailClientProps) {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Draggable floating product video */}
+      {floatingVideo && (
+        <FloatingProductVideo
+          src={floatingVideo.url}
+          poster={floatingVideo.thumbnailUrl}
+          title={floatingVideo.title || product.name}
+        />
+      )}
 
       {/* Mobile Sticky Add To Cart Bar */}
       <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 p-3 sm:hidden flex items-center justify-between gap-3 shadow-2xl">

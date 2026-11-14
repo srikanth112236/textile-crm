@@ -20,7 +20,7 @@ import { CouponInput } from '@/components/cart/CouponInput';
 
 export const CartClient: React.FC = () => {
   const { items, total, itemCount, loading, updateItem, removeItem } = useCart();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const { addItem: addToWishlist } = useWishlist();
   const router = useRouter();
   const [updatingIndex, setUpdatingIndex] = useState<number | null>(null);
@@ -89,11 +89,8 @@ export const CartClient: React.FC = () => {
     }
   };
 
-  React.useEffect(() => {
-    if (!isAuthenticated && !guestLoading && guestItems.length === 0 && !loading) {
-      router.push('/?authRequired=1&callbackUrl=/cart');
-    }
-  }, [isAuthenticated, guestLoading, guestItems.length, loading, router]);
+  // `/cart` is public now: logged-in customers and guests with a local bag can
+  // both use it. No auth-based redirect here (that caused deep links to bounce).
 
   const handleQuantityChange = async (itemIndex: number, newQuantity: number) => {
     if (newQuantity < 1) return;
@@ -123,7 +120,7 @@ export const CartClient: React.FC = () => {
     return image.url;
   };
 
-  if (loading || (!isAuthenticated && guestLoading)) {
+  if (loading || authLoading || (!isAuthenticated && guestLoading)) {
     return (
       <div className="container py-8">
         <h1 className="text-3xl font-bold mb-6">Shopping Cart</h1>
@@ -229,7 +226,10 @@ export const CartClient: React.FC = () => {
             <CardHeader><CardTitle>Order Summary</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <div className="flex justify-between font-semibold text-lg"><span>Total</span><span>{formatPrice(guestTotal)}</span></div>
-              <CouponInput items={guestItems.map((g: any) => ({ productId: g.productId, quantity: g.quantity }))} />
+              <CouponInput
+                items={guestItems.map((g: any) => ({ productId: g.productId, quantity: g.quantity }))}
+                subtotal={guestTotal}
+              />
               <Button className="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold" size="lg" asChild>
                 <Link href="/checkout?guest=1">Checkout as Guest</Link>
               </Button>
@@ -437,7 +437,10 @@ export const CartClient: React.FC = () => {
                 <span className="text-muted-foreground">Items</span>
                 <span>{itemCount}</span>
               </div>
-              <CouponInput items={items.map((it: any) => ({ productId: it.productId, quantity: it.quantity }))} />
+              <CouponInput
+                items={items.map((it: any) => ({ productId: it.productId, quantity: it.quantity }))}
+                subtotal={total}
+              />
             </div>
             <Separator />
             <div className="flex justify-between items-baseline">

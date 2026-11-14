@@ -13,6 +13,7 @@ import {
   cancelOrder,
   repeatOrder,
   getAllOrders,
+  getOrderStats,
   // Phase 9 additions
   addOrderNote,
   updateOrderPriority,
@@ -32,6 +33,7 @@ const router = express.Router();
 
 // Must come before parameterized routes
 router.get('/admin/all', authenticate, requireAdmin, getAllOrders);
+router.get('/admin/stats', authenticate, requireAdmin, getOrderStats);
 router.get('/admin/export', authenticate, requireAdmin, exportOrders);
 router.post('/admin/bulk-update', authenticate, requireAdmin, bulkUpdateOrders);
 

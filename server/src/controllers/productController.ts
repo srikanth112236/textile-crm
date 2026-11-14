@@ -219,6 +219,7 @@ const createProductSchema = Joi.object({
     url: Joi.string().trim().required(),
     thumbnailUrl: Joi.string().trim().optional().allow(''),
     title: Joi.string().trim().optional().allow(''),
+    enabled: Joi.boolean().optional(),
   })).optional(),
   
   // Advanced Variants
@@ -306,6 +307,7 @@ const updateProductSchema = Joi.object({
     url: Joi.string().trim().required(),
     thumbnailUrl: Joi.string().trim().optional().allow(''),
     title: Joi.string().trim().optional().allow(''),
+    enabled: Joi.boolean().optional(),
   })).optional(),
   
   // Advanced Variants
@@ -1772,11 +1774,19 @@ export const getProductFilters = async (req: Request, res: Response): Promise<vo
 
     // Price range + sizes + categories + merchandising distincts all run in
     // parallel (previously 4+ sequential Atlas round-trips per filter open).
+    // Sizes only: unwind variant attributes and keep the Size attribute.
+    // Also return a per-size product count so the UI can show “M (34)” and
+    // disable options that would return zero products.
     const sizesAggPromise = Product.aggregate([
       { $match: baseFilter },
       { $unwind: '$variantAttributes' },
+      { $match: { 'variantAttributes.name': { $regex: '^size$', $options: 'i' } } },
       { $unwind: '$variantAttributes.options' },
-      { $group: { _id: '$variantAttributes.options.value' } },
+      { $group: { _id: '$variantAttributes.options.value', count: { $sum: 1 } } },
+    ]);
+    const categoryCountsPromise = Product.aggregate([
+      { $match: baseFilter },
+      { $group: { _id: '$category', count: { $sum: 1 } } },
     ]);
     const priceAggPromise = Product.aggregate([
       { $match: baseFilter },
@@ -1788,7 +1798,7 @@ export const getProductFilters = async (req: Request, res: Response): Promise<vo
         },
       },
     ]);
-    const categoriesPromise = Category.find({ status: 'active' }).select('name slug').lean();
+    const categoriesPromise = Category.find({ status: 'active' }).select('name slug parent').lean();
     const merchPromise = Promise.all([
       Product.distinct('fit', { ...baseFilter, fit: { $nin: [null, ''] } }),
       Product.distinct('fabric', { ...baseFilter, fabric: { $nin: [null, ''] } }),
@@ -1802,17 +1812,39 @@ export const getProductFilters = async (req: Request, res: Response): Promise<vo
       Product.distinct('variantAttributes.options.value', baseFilter),
     ]);
 
-    const [priceAgg, sizesAgg, activeCategories, [fits, fabrics, patterns, occasions], [nameRows, optionValues]] =
-      await Promise.all([priceAggPromise, sizesAggPromise, categoriesPromise, merchPromise, colorScanPromise]);
+    const [priceAgg, sizesAgg, activeCategories, [fits, fabrics, patterns, occasions], [nameRows, optionValues], categoryCountRows] =
+      await Promise.all([priceAggPromise, sizesAggPromise, categoriesPromise, merchPromise, colorScanPromise, categoryCountsPromise]);
 
     // 1. Price Range
     const minPrice = priceAgg[0]?.minPrice || 0;
     const maxPrice = priceAgg[0]?.maxPrice || 5000;
 
-    // 2. Available Sizes from variantAttributes
+    // 2. Available Sizes from variantAttributes (with facet counts)
     const rawSizes = (sizesAgg as any[]).map((item) => item._id).filter(Boolean);
+    const sizeCounts: Record<string, number> = {};
+    for (const row of sizesAgg as any[]) {
+      if (row?._id) sizeCounts[String(row._id)] = row.count || 0;
+    }
     const ORDERED_SIZES = ['S', 'M', 'L', 'XL', 'XXL'];
     const availableSizes = ORDERED_SIZES.filter(s => rawSizes.includes(s)).concat(rawSizes.filter(s => !ORDERED_SIZES.includes(s)));
+
+    const categoryCounts: Record<string, number> = {};
+    // Parent categories (Trousers, Activewear, Ethnic Wear) own child
+    // categories, so their facet count must roll up the child product counts.
+    const categoryParentOf = new Map<string, string>();
+    for (const cat of activeCategories as any[]) {
+      if (cat?.parent) categoryParentOf.set(String(cat._id), String(cat.parent));
+    }
+    for (const row of categoryCountRows as any[]) {
+      if (!row?._id) continue;
+      let current: string | undefined = String(row._id);
+      const guard = new Set<string>();
+      while (current && !guard.has(current)) {
+        guard.add(current);
+        categoryCounts[current] = (categoryCounts[current] || 0) + (row.count || 0);
+        current = categoryParentOf.get(current);
+      }
+    }
 
     const KNOWN_COLORS = [
       { name: 'Black', hex: '#000000', regex: /black|jet black/i },
@@ -1827,6 +1859,20 @@ export const getProductFilters = async (req: Request, res: Response): Promise<vo
 
     const activeProductsCorpus =
       `${(nameRows as any[]).map((p) => p.name || '').join(' ')} ${(optionValues as any[]).filter(Boolean).join(' ')}`;
+
+    const colorCountEntries = await Promise.all(
+      KNOWN_COLORS.map(async (colorItem) => {
+        const count = await Product.countDocuments({
+          ...baseFilter,
+          $or: [
+            { name: colorItem.regex },
+            { 'variantAttributes.options.value': colorItem.regex },
+          ],
+        });
+        return [colorItem.name, count] as const;
+      })
+    );
+    const colorCounts: Record<string, number> = Object.fromEntries(colorCountEntries);
 
     const availableColors = KNOWN_COLORS.filter((colorItem) =>
       colorItem.regex.test(activeProductsCorpus)
@@ -1845,6 +1891,9 @@ export const getProductFilters = async (req: Request, res: Response): Promise<vo
         patterns: (patterns as string[]).filter(Boolean).sort(),
         occasions: (occasions as string[]).filter(Boolean).sort(),
         badges: ['new', 'bestseller', 'trending', 'limited', 'sale'],
+        sizeCounts,
+        colorCounts,
+        categoryCounts,
       },
     });
   } catch (error: any) {

@@ -172,7 +172,7 @@ export default function CheckoutClient() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-6xl">
+    <div className="w-full px-3 py-3 sm:px-4 lg:px-5 space-y-4">
       {/* Step Indicator */}
       <div className="mb-8">
         <div className="flex items-center justify-center gap-4 mb-4">
