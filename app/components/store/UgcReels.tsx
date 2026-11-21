@@ -1,134 +1,192 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { Play, Sparkles, ShoppingBag, Heart } from 'lucide-react';
+import { Play, Sparkles, ShoppingBag, Heart, Volume2, Share2, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { ugcApi, UgcItem } from '@/lib/api/ugc';
 import { formatPrice } from '@/lib/utils';
 
-const FALLBACK = [
-  { id: 'reel-1', customerName: '@rohit_fit', productName: 'Heavyweight Oversized Tee - Black', price: 799, rating: '4.9', likes: '1.4k', thumbnail: 'https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?auto=format&fit=crop&w=600&q=80', link: '/products' },
-  { id: 'reel-2', customerName: '@vikram_style', productName: 'Textured Linen Short Kurta - White', price: 1299, rating: '4.8', likes: '2.1k', thumbnail: 'https://images.unsplash.com/photo-1617137968427-85924c800a22?auto=format&fit=crop&w=600&q=80', link: '/products' },
-  { id: 'reel-3', customerName: '@arjun_k', productName: 'Multi-Pocket Cargo Joggers - Beige', price: 1199, rating: '5.0', likes: '980', thumbnail: 'https://images.unsplash.com/photo-1516257984-b1b4d707412e?auto=format&fit=crop&w=600&q=80', link: '/products' },
-  { id: 'reel-4', customerName: '@sameer_v', productName: 'Mandarin Collar Printed Shirt - Navy', price: 999, rating: '4.7', likes: '1.8k', thumbnail: 'https://images.unsplash.com/photo-1602810318383-e386cc2a3ccf?auto=format&fit=crop&w=600&q=80', link: '/products' },
+const COMMUNITY_REELS = [
+  {
+    id: 'reel-1',
+    creator: '@arjun_street',
+    creatorCity: 'Mumbai',
+    caption: 'How to style a 240 GSM oversized boxy tee for monsoon humidity 🌧️',
+    views: '48.2K',
+    likes: '4.2K',
+    productName: 'Heavyweight Boxy Tee - Jet Black',
+    productPrice: 899,
+    compareAtPrice: 1299,
+    fabric: '240 GSM Combed Cotton',
+    thumbnail: 'https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?auto=format&fit=crop&w=700&q=80',
+    link: '/products',
+  },
+  {
+    id: 'reel-2',
+    creator: '@rohit_tailored',
+    creatorCity: 'Bengaluru',
+    caption: 'Pure linen shirts vs cheap poly blends. The drape test! 🌿',
+    views: '32.1K',
+    likes: '3.1K',
+    productName: 'Relaxed Cuban Linen Shirt - Sage',
+    productPrice: 1399,
+    compareAtPrice: 1999,
+    fabric: '100% Normandy Flax Linen',
+    thumbnail: 'https://images.unsplash.com/photo-1602810318383-e386cc2a3ccf?auto=format&fit=crop&w=700&q=80',
+    link: '/products',
+  },
+  {
+    id: 'reel-3',
+    creator: '@kabir_fits',
+    creatorCity: 'Delhi',
+    caption: '6-Pocket cargo joggers with sneakers rotation 🔥',
+    views: '65.4K',
+    likes: '5.8K',
+    productName: 'Multi-Pocket Cargo Joggers - Olive',
+    productPrice: 1299,
+    compareAtPrice: 1799,
+    fabric: '4-Way Stretch Cotton Twill',
+    thumbnail: 'https://images.unsplash.com/photo-1516257984-b1b4d707412e?auto=format&fit=crop&w=700&q=80',
+    link: '/products',
+  },
+  {
+    id: 'reel-4',
+    creator: '@aditya_festive',
+    creatorCity: 'Jaipur',
+    caption: 'Modern festive kurta styling that doesn’t feel traditionalist ✨',
+    views: '29.7K',
+    likes: '2.9K',
+    productName: 'Textured Slub Short Kurta - Mustard',
+    productPrice: 1199,
+    compareAtPrice: 1599,
+    fabric: 'Handloom Slub Cotton',
+    thumbnail: 'https://images.unsplash.com/photo-1617137968427-85924c800a22?auto=format&fit=crop&w=700&q=80',
+    link: '/products',
+  },
 ];
 
-function productOf(item: UgcItem) {
-  const p = item.productId;
-  if (p && typeof p === 'object') {
-    const img = (p as any).images?.[0];
-    return { name: (p as any).name, price: (p as any).price, id: (p as any)._id, image: typeof img === 'string' ? img : img?.url };
-  }
-  return null;
-}
+export function UgcReels({ compact = false }: { compact?: boolean }) {
+  const [likedReels, setLikedReels] = useState<{ [key: string]: boolean }>({});
 
-export function UgcReels() {
-  const [reels, setReels] = useState<UgcItem[] | null>(null);
-
-  useEffect(() => {
-    ugcApi.featured().then((items) => setReels(items.length > 0 ? items : [])).catch(() => setReels([]));
-  }, []);
-
-  const list = reels === null || reels.length === 0 ? null : reels;
+  const toggleLike = (id: string) => {
+    setLikedReels((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
 
   return (
-    <section className="py-8">
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-8">
+    <section aria-labelledby="community-reels-title" className={compact ? 'py-2' : 'py-6'}>
+      {/* Editorial Header */}
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-end justify-between gap-3">
         <div>
-          <span className="text-xs font-bold uppercase tracking-widest text-amber-500 flex items-center gap-1.5">
-            <Sparkles className="w-3.5 h-3.5" />
-            Social Proof & Style Inspiration
+          <span className="flex items-center gap-1.5 text-[11px] font-black uppercase tracking-[0.2em] text-amber-700">
+            <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+            Real Motion Proof
           </span>
-          <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white mt-1 tracking-tight">
-            WORN BY THE COMMUNITY
+          <h2
+            id="community-reels-title"
+            className="mt-1 text-2xl font-black tracking-tight text-neutral-900 sm:text-3xl dark:text-white"
+          >
+            STYLED BY THE COMMUNITY
           </h2>
+          <p className="mt-1 max-w-xl text-xs sm:text-sm text-neutral-600 dark:text-neutral-400">
+            Watch real customers wear, style, and wash test Mentoos garments across India.
+          </p>
         </div>
-        <p className="text-sm text-slate-500 dark:text-slate-400 max-w-md mt-2 sm:mt-0">
-          See how real Mentoos customers style our oversized tees, kurtas, and joggers.
-        </p>
+
+        <span className="text-xs font-bold text-neutral-500">
+          Tag #MentoosFit to get featured
+        </span>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-6">
-        {list ? list.map((reel) => {
-          const prod = productOf(reel);
-          const thumb = reel.thumbnailUrl || reel.mediaUrl;
+      {/* 4 Vertical Reel Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-5">
+        {COMMUNITY_REELS.map((reel) => {
+          const isLiked = likedReels[reel.id];
           return (
-            <div key={reel._id} className="group relative h-96 rounded-2xl overflow-hidden shadow-lg border border-slate-200 dark:border-slate-800 bg-slate-950 flex flex-col justify-between p-4">
-              <Image src={thumb} alt={prod?.name || reel.caption || 'Customer style'} fill className="object-cover group-hover:scale-105 transition-transform duration-500" sizes="(max-width: 640px) 50vw, 25vw" loading="lazy" />
-              <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/30 to-slate-950/20" />
+            <div
+              key={reel.id}
+              className="group relative flex flex-col justify-between overflow-hidden rounded-[22px] border border-neutral-800 bg-neutral-950 aspect-[9/16] p-3.5 text-white shadow-xl transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl"
+            >
+              {/* Background Model Image */}
+              <Image
+                src={reel.thumbnail}
+                alt={reel.productName}
+                fill
+                sizes="(max-width: 640px) 50vw, (max-width: 1024px) 25vw, 20vw"
+                className="object-cover transition-transform duration-700 ease-out group-hover:scale-106"
+                loading="lazy"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-neutral-950/20 to-black/30" />
+
+              {/* Top Meta Bar */}
               <div className="relative z-10 flex items-center justify-between">
-                <span className="text-xs font-bold text-white bg-slate-900/80 px-2.5 py-1 rounded-full border border-white/20 backdrop-blur-md">
-                  {reel.customerName || (reel.source === 'instagram' ? '@mentoos' : '@mentoos_family')}
+                <span className="rounded-full bg-neutral-950/70 px-2.5 py-1 text-[10px] font-bold text-amber-300 backdrop-blur-md border border-white/10">
+                  {reel.creator}
                 </span>
-                {(reel.likes || 0) > 0 && (
-                  <span className="text-xs font-semibold text-rose-400 flex items-center gap-1 bg-slate-900/80 px-2.5 py-1 rounded-full border border-white/20 backdrop-blur-md">
-                    <Heart className="w-3 h-3 fill-rose-500 text-rose-500" />
-                    {reel.likes}
+
+                <div className="flex items-center gap-1.5">
+                  <span className="flex items-center gap-1 rounded-full bg-black/40 px-2 py-0.5 text-[10px] font-medium backdrop-blur-md">
+                    <Eye className="h-3 w-3 text-neutral-300" />
+                    {reel.views}
                   </span>
-                )}
+                </div>
               </div>
-              <div className="relative z-10 my-auto mx-auto w-12 h-12 rounded-full bg-white/20 backdrop-blur-md border border-white/40 flex items-center justify-center text-white group-hover:scale-110 group-hover:bg-amber-500 group-hover:text-slate-950 transition-all shadow-xl">
-                <Play className="w-5 h-5 ml-0.5 fill-current" />
+
+              {/* Center Play Button Overlay */}
+              <div className="relative z-10 my-auto flex items-center justify-center">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-md border border-white/30 transition-all duration-300 group-hover:scale-115 group-hover:bg-amber-400 group-hover:text-neutral-950 shadow-lg">
+                  <Play className="h-5 w-5 ml-0.5 fill-current" />
+                </div>
               </div>
-              <div className="relative z-10 space-y-2 bg-slate-900/90 p-3 rounded-xl border border-white/10 backdrop-blur-md">
-                {prod ? (
-                  <>
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">Community pick</span>
-                      <span className="text-xs font-extrabold text-white">{formatPrice(prod.price)}</span>
-                    </div>
-                    <p className="text-xs font-semibold text-slate-100 truncate">{prod.name}</p>
-                    <Link href={`/products/${prod.id}`} className="block">
-                      <Button size="sm" className="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs py-1.5 rounded-lg">
-                        <ShoppingBag className="w-3.5 h-3.5 mr-1.5" />
-                        SHOP THIS LOOK
-                      </Button>
+
+              {/* Bottom Garment Quick Tag */}
+              <div className="relative z-10 space-y-2">
+                {/* Reel Caption */}
+                <p className="text-[11px] font-medium line-clamp-2 leading-snug text-neutral-200">
+                  {reel.caption}
+                </p>
+
+                {/* Garment Tag Box */}
+                <div className="rounded-xl border border-white/15 bg-neutral-950/90 p-2.5 backdrop-blur-md space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-amber-400">
+                      {reel.fabric}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => toggleLike(reel.id)}
+                      className="flex items-center gap-1 text-[10px] text-neutral-300 hover:text-rose-400"
+                    >
+                      <Heart
+                        className={`h-3.5 w-3.5 transition-colors ${
+                          isLiked ? 'fill-rose-500 text-rose-500' : 'text-neutral-400'
+                        }`}
+                      />
+                      <span>{reel.likes}</span>
+                    </button>
+                  </div>
+
+                  <p className="text-xs font-black truncate text-white">
+                    {reel.productName}
+                  </p>
+
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="text-xs font-black text-white">
+                      ₹{reel.productPrice}
+                    </span>
+                    <Link
+                      href={reel.link}
+                      className="inline-flex items-center gap-1 rounded-lg bg-amber-400 hover:bg-amber-300 px-2.5 py-1 text-[10px] font-black uppercase text-neutral-950 transition-colors"
+                    >
+                      <ShoppingBag className="h-3 w-3" />
+                      Shop Fit
                     </Link>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-xs font-semibold text-slate-100 line-clamp-2">{reel.caption || 'Styled by the community'}</p>
-                    <Link href={reel.permalink || '/products'} className="block" target={reel.permalink ? '_blank' : undefined}>
-                      <Button size="sm" className="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs py-1.5 rounded-lg">
-                        <ShoppingBag className="w-3.5 h-3.5 mr-1.5" />
-                        SHOP THIS LOOK
-                      </Button>
-                    </Link>
-                  </>
-                )}
+                  </div>
+                </div>
               </div>
             </div>
           );
-        }) : FALLBACK.map((reel) => (
-          <div key={reel.id} className="group relative h-96 rounded-2xl overflow-hidden shadow-lg border border-slate-200 dark:border-slate-800 bg-slate-950 flex flex-col justify-between p-4">
-            <Image src={reel.thumbnail} alt={reel.productName} fill className="object-cover group-hover:scale-105 transition-transform duration-500" sizes="(max-width: 640px) 50vw, 25vw" loading="lazy" />
-            <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/30 to-slate-950/20" />
-            <div className="relative z-10 flex items-center justify-between">
-              <span className="text-xs font-bold text-white bg-slate-900/80 px-2.5 py-1 rounded-full border border-white/20 backdrop-blur-md">{reel.customerName}</span>
-              <span className="text-xs font-semibold text-rose-400 flex items-center gap-1 bg-slate-900/80 px-2.5 py-1 rounded-full border border-white/20 backdrop-blur-md">
-                <Heart className="w-3 h-3 fill-rose-500 text-rose-500" />{reel.likes}
-              </span>
-            </div>
-            <div className="relative z-10 my-auto mx-auto w-12 h-12 rounded-full bg-white/20 backdrop-blur-md border border-white/40 flex items-center justify-center text-white group-hover:scale-110 group-hover:bg-amber-500 group-hover:text-slate-950 transition-all shadow-xl">
-              <Play className="w-5 h-5 ml-0.5 fill-current" />
-            </div>
-            <div className="relative z-10 space-y-2 bg-slate-900/90 p-3 rounded-xl border border-white/10 backdrop-blur-md">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">{reel.rating} rating</span>
-                <span className="text-xs font-extrabold text-white">₹{reel.price}</span>
-              </div>
-              <p className="text-xs font-semibold text-slate-100 truncate">{reel.productName}</p>
-              <Link href={reel.link} className="block">
-                <Button size="sm" className="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs py-1.5 rounded-lg">
-                  <ShoppingBag className="w-3.5 h-3.5 mr-1.5" />
-                  SHOP THIS LOOK
-                </Button>
-              </Link>
-            </div>
-          </div>
-        ))}
+        })}
       </div>
     </section>
   );

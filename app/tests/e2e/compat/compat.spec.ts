@@ -17,8 +17,26 @@ test.describe('Cross-browser compatibility', () => {
   test('Product listing and size filter work', async ({ page }) => {
     await page.goto('/products');
     await expect(page.getByText(/Showing 1 to 20 of \d+ products/).first()).toBeVisible({ timeout: 30_000 });
-    await page.locator('aside button').filter({ hasText: /^M/ }).first().click();
+
+    const sidebar = page.locator('aside').first();
+    const sizeTrigger = sidebar.getByRole('button', { name: /^Size/i });
+
+    // Filters are collapsed by default except Categories + Price. Open Size
+    // and wait for its options + counts before clicking; WebKit can hydrate
+    // after the first paint, and size buttons are disabled until counts land.
+    await expect(async () => {
+      if ((await sizeTrigger.getAttribute('aria-expanded')) !== 'true') {
+        await sizeTrigger.click();
+      }
+      await expect(sizeTrigger).toHaveAttribute('aria-expanded', 'true', { timeout: 1000 });
+    }).toPass({ timeout: 20_000 });
+
+    const sizeM = sidebar.getByRole('button', { name: /^M(\s|$)/ }).first();
+    await expect(sizeM).toBeEnabled({ timeout: 20_000 });
+    await sizeM.click();
+
     await expect.poll(() => page.url()).toContain('size=M');
+    await expect(sizeTrigger).toHaveAttribute('aria-expanded', 'true');
     await expect(page.getByText(/Showing 1 to \d+ of \d+ products/).first()).toBeVisible({ timeout: 30_000 });
   });
 

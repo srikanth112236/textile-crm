@@ -1,4 +1,5 @@
 import mongoose, { Document, Schema } from 'mongoose';
+import { normalizeVideoList } from '../utils/instagram';
 
 // =====================================================
 // REVIEW SCHEMAS (Existing - Enhanced)
@@ -265,6 +266,12 @@ export interface IProduct extends Document {
     title?: string;
     /** Show the draggable floating player on the storefront PDP (default true). */
     enabled?: boolean;
+    provider?: 'upload' | 'instagram' | 'youtube' | 'vimeo';
+    sourceUrl?: string;
+    shortcode?: string;
+    embedUrl?: string;
+    mediaType?: 'file' | 'reel' | 'post' | 'tv';
+    aspectRatio?: '9:16' | '16:9' | '1:1';
   }>;
   
   // Advanced Variants
@@ -668,6 +675,16 @@ const ProductSchema = new Schema<IProduct>(
       thumbnailUrl: { type: String, trim: true },
       title: { type: String, trim: true },
       enabled: { type: Boolean, default: true },
+      provider: {
+        type: String,
+        enum: ['upload', 'instagram', 'youtube', 'vimeo'],
+        default: 'upload',
+      },
+      sourceUrl: { type: String, trim: true },
+      shortcode: { type: String, trim: true },
+      embedUrl: { type: String, trim: true },
+      mediaType: { type: String, enum: ['file', 'reel', 'post', 'tv'], default: 'file' },
+      aspectRatio: { type: String, enum: ['9:16', '16:9', '1:1'], default: '16:9' },
     }],
     
     // Advanced Variants
@@ -781,6 +798,15 @@ ProductSchema.pre('save', function (next) {
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/(^-|-$)/g, '');
+  }
+  next();
+});
+
+// Normalise video providers (Instagram Reel/Post/TV URLs) on every write path,
+// including bulk import, without requiring the admin UI to precompute metadata.
+ProductSchema.pre('save', function (next) {
+  if (this.videos && Array.isArray(this.videos)) {
+    this.videos = normalizeVideoList(this.videos as any[]) as any;
   }
   next();
 });

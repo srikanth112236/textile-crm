@@ -6,8 +6,10 @@ import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
 import { productsApi } from '@/lib/api/products';
 import { useCart } from '@/lib/contexts/CartContext';
-import { useRouter } from 'next/navigation';
 import { LoginModal } from '@/components/auth/LoginModal';
+import { useAuth } from '@/lib/hooks/useAuth';
+import { useToast } from '@/hooks/use-toast';
+import { trackEvent } from '@/lib/analytics/events';
 import { formatPrice } from '@/lib/utils';
 
 interface FBTProps {
@@ -21,8 +23,10 @@ interface FBTProps {
 // falls back to same-category recommendations when empty.
 export function FrequentlyBoughtTogether({ productId, mainPrice, mainName, mainImage }: FBTProps) {
   const { addItem, requiresAuth } = useCart();
-  const router = useRouter();
+  const { isStaff } = useAuth();
+  const { toast } = useToast();
   const [loginOpen, setLoginOpen] = useState(false);
+  const [pendingItems, setPendingItems] = useState<any[] | null>(null);
   const [items, setItems] = useState<any[]>([]);
   const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [adding, setAdding] = useState(false);
@@ -56,7 +60,16 @@ export function FrequentlyBoughtTogether({ productId, mainPrice, mainName, mainI
   const total = mainPrice + selected.reduce((s, p) => s + (p.price || 0), 0);
 
   const handleAddAll = async () => {
+    if (isStaff) {
+      trackEvent('staff_commerce_blocked', { surface: 'add_to_cart' });
+      toast({
+        title: 'Customer account required',
+        description: 'Staff accounts cannot shop. Use the dashboard or sign in as a customer.',
+      });
+      return;
+    }
     if (requiresAuth()) {
+      setPendingItems(selected.map((p: any) => ({ productId: p._id, quantity: 1 })));
       setLoginOpen(true);
       return;
     }
@@ -124,7 +137,12 @@ export function FrequentlyBoughtTogether({ productId, mainPrice, mainName, mainI
           {adding ? 'Adding…' : `Add ${selected.length} to Cart`}
         </Button>
       </div>
-      <LoginModal open={loginOpen} onOpenChange={setLoginOpen} title="Login to Shop" description="Login or register to add items. Only pincode check is available without login." />
+      <LoginModal
+        open={loginOpen}
+        onOpenChange={setLoginOpen}
+        action="cart"
+        pendingAction={pendingItems ? { type: 'add_many', items: pendingItems } : null}
+      />
     </div>
   );
 }

@@ -32,37 +32,29 @@ export default withAuth(
       '/terms',
       '/cookies',
     ]);
-    const prefixPublicRoutes = ['/products', '/search', '/categories'];
+    const prefixPublicRoutes = ['/products', '/search', '/categories', '/templates'];
 
     const isExpressCheckout = path === '/checkout/express' || path.startsWith('/checkout/express/');
     const isPublicRoute =
       !isExpressCheckout &&
       (exactPublicRoutes.has(path) || prefixPublicRoutes.some((route) => path.startsWith(`${route}/`)));
 
-    // Allow access to public routes without token
+    // Allow access to public routes without a token.
+    // Auth pages stay reachable for signed-in users too; the page itself
+    // shows a "Continue shopping / Go to dashboard" choice. We never hijack
+    // a visitor into a dashboard just because they are authenticated.
     if (isPublicRoute) {
-      // For auth pages, if user is already authenticated, redirect to their dashboard
-      if (token && (path === '/login' || path === '/register' || path === '/register-admin')) {
-        const userRole = (token as any)?.role;
-        if (userRole === 'superadmin') {
-          return NextResponse.redirect(new URL('/superadmin/dashboard', req.url));
-        } else if (userRole === 'admin') {
-          return NextResponse.redirect(new URL('/admin/dashboard', req.url));
-        } else if (userRole === 'user') {
-          return NextResponse.redirect(new URL('/user/dashboard', req.url));
-        }
-      }
-      // Allow access to all public routes (including root path)
       return NextResponse.next();
     }
 
-    // For protected routes, require authentication
+    // For protected routes, require authentication.
     if (!token) {
       // Product rule: never force /login. Land on the storefront with a
       // gentle login prompt (AuthPromptListener opens the modal on `/`).
+      // Keep the query string so filters/checkout intent survive login.
       const homeUrl = new URL('/', req.url);
       homeUrl.searchParams.set('authRequired', '1');
-      homeUrl.searchParams.set('callbackUrl', path);
+      homeUrl.searchParams.set('callbackUrl', `${path}${req.nextUrl.search || ''}`);
       return NextResponse.redirect(homeUrl);
     }
 

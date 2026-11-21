@@ -65,6 +65,32 @@ const config: Config = {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
         },
+        // P0 editorial tokens. Channels live in globals.css so the
+        // `/opacity` modifier keeps working.
+        ink: {
+          DEFAULT: 'rgb(var(--color-ink) / <alpha-value>)',
+          muted: 'rgb(var(--color-ink-muted) / <alpha-value>)',
+          subtle: 'rgb(var(--color-ink-subtle) / <alpha-value>)',
+        },
+        paper: 'rgb(var(--color-paper) / <alpha-value>)',
+        sand: {
+          DEFAULT: 'rgb(var(--color-sand) / <alpha-value>)',
+          deep: 'rgb(var(--color-sand-deep) / <alpha-value>)',
+        },
+        line: 'rgb(var(--color-line) / <alpha-value>)',
+        brand: {
+          DEFAULT: 'rgb(var(--color-brand) / <alpha-value>)',
+          strong: 'rgb(var(--color-brand-strong) / <alpha-value>)',
+          soft: 'rgb(var(--color-brand-soft) / <alpha-value>)',
+        },
+        success: {
+          DEFAULT: 'rgb(var(--color-success) / <alpha-value>)',
+          soft: 'rgb(var(--color-success-soft) / <alpha-value>)',
+        },
+        danger: {
+          DEFAULT: 'rgb(var(--color-danger) / <alpha-value>)',
+          soft: 'rgb(var(--color-danger-soft) / <alpha-value>)',
+        },
       },
       borderRadius: {
         lg: 'var(--radius)',
@@ -96,15 +122,39 @@ const config: Config = {
           '0%': { transform: 'translate3d(0, 0, 0)' },
           '100%': { transform: 'translate3d(-50%, 0, 0)' },
         },
+        meteor: {
+          '0%': { transform: 'rotate(215deg) translateX(0)', opacity: '1' },
+          '70%': { opacity: '1' },
+          '100%': {
+            transform: 'rotate(215deg) translateX(-500px)',
+            opacity: '0',
+          },
+        },
       },
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
         'hero-rise': 'hero-rise 600ms cubic-bezier(0.22, 1, 0.36, 1) forwards',
         marquee: 'marquee 38s linear infinite',
+        meteor: 'meteor 5s linear infinite',
       },
       fontSize: {
         base: ['1rem', { lineHeight: '1.2', letterSpacing: '-0.01em' }],
+        // P0 semantic scale. Existing utilities are untouched; new work
+        // should use these names so sizes stop being invented per component.
+        display: ['clamp(2rem, 5vw, 3.625rem)', { lineHeight: '1.04', letterSpacing: '-0.035em', fontWeight: '800' }],
+        hero: ['clamp(1.75rem, 4vw, 2.75rem)', { lineHeight: '1.08', letterSpacing: '-0.03em', fontWeight: '800' }],
+        h1: ['clamp(1.5rem, 3vw, 2rem)', { lineHeight: '1.15', letterSpacing: '-0.025em', fontWeight: '800' }],
+        h2: ['1.4375rem', { lineHeight: '1.2', letterSpacing: '-0.02em', fontWeight: '800' }],
+        h3: ['1rem', { lineHeight: '1.3', letterSpacing: '-0.01em', fontWeight: '750' }],
+        label: ['0.6875rem', { lineHeight: '1.35', letterSpacing: '0.08em', fontWeight: '800' }],
+        micro: ['0.625rem', { lineHeight: '1.3', letterSpacing: '0.06em', fontWeight: '800' }],
+      },
+      boxShadow: {
+        soft: 'var(--shadow-soft)',
+      },
+      transitionTimingFunction: {
+        'out-soft': 'cubic-bezier(0.22, 1, 0.36, 1)',
       },
     },
   },

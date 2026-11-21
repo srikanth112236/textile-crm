@@ -95,6 +95,7 @@ import ugcRoutes from './routes/ugcRoutes';
 import shopLookRoutes from './routes/shopLookRoutes';
 import returnRoutes from './routes/returnRoutes';
 import referralRoutes from './routes/referralRoutes';
+import productImportRoutes from './routes/productImportRoutes';
 app.use('/api/auth', authRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/upload', uploadRoutes);
@@ -105,6 +106,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/cart', cartRoutes);
 app.use('/api/wishlist', wishlistRoutes);
 app.use('/api/orders', orderRoutes);
+app.use('/api/admin/imports/products', productImportRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/discounts', discountRoutes);
 app.use('/api/loyalty', loyaltyRoutes);
@@ -126,12 +128,23 @@ app.use(errorHandler);
 const startServer = async () => {
   try {
     await connectDatabase();
-    
+
+    // Import jobs are in-process workers. Any job still marked importing at
+    // boot was interrupted by a restart; mark it failed so the admin can
+    // Resume it from the history screen.
+    try {
+      const { markInterruptedImports } = await import('./services/productImport');
+      const interrupted = await markInterruptedImports();
+      if (interrupted > 0) console.warn(`Marked ${interrupted} interrupted import job(s) as resumable.`);
+    } catch (error) {
+      console.warn('Could not mark interrupted imports:', error);
+    }
+
     // Initialize Elasticsearch (optional, graceful degradation)
     initializeElasticsearch();
     
     // Initialize Socket.io
-    initializeSocket(httpServer);
+    await initializeSocket(httpServer);
 
     // Fallback tracking sync for missed Shiprocket webhooks (opt-out: SHIPMENT_SYNC_ENABLED=false)
     try {

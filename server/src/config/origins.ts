@@ -19,7 +19,14 @@ const envOrigins = (process.env.FRONTEND_URL || '')
 const devOrigins =
   process.env.NODE_ENV === 'production'
     ? []
-    : ['http://localhost:3001', 'http://127.0.0.1:3001'];
+    : [
+        'http://localhost:3001',
+        'http://127.0.0.1:3001',
+        // Expo web preview for the React Native app (`cd mobile && npm run web`).
+        'http://localhost:8081',
+        'http://127.0.0.1:8081',
+        'http://localhost:19006',
+      ];
 
 export const allowedOrigins: string[] = Array.from(
   new Set([...ALWAYS_ALLOWED, ...envOrigins, ...devOrigins])

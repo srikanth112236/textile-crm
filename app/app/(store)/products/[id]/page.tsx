@@ -55,7 +55,11 @@ export async function generateMetadata({ params }: ProductDetailPageProps): Prom
       description: product.metadata?.ogDescription || metaDescription,
       images: imageUrl ? [{ url: imageUrl, alt: product.name }] : [],
       type: 'website',
+      url: `/products/${id}`,
     },
+    robots: product.status === 'active'
+      ? { index: true, follow: true }
+      : { index: false, follow: false },
     twitter: {
       card: (product.metadata?.twitterCard as 'summary' | 'summary_large_image') || 'summary_large_image',
       title: product.metadata?.ogTitle || metaTitle,
@@ -82,21 +86,28 @@ export default async function ProductDetailPage(props: ProductDetailPageProps) {
     process.env.NEXTAUTH_URL ||
     'http://localhost:3001';
   const absoluteImage = (img: string) => (img.startsWith('http') ? img : `${siteUrl}${img.startsWith('/') ? '' : '/'}${img}`);
+  const categoryName = typeof product.category === 'object' ? product.category?.name : 'Menswear';
+  const categorySlug = typeof product.category === 'object' ? product.category?.slug : '';
   const structuredData = {
     '@context': 'https://schema.org',
     '@type': 'Product',
     name: product.name,
-    description: product.description,
-    sku: product._id,
+    description: product.shortDescription || product.description,
+    sku: product.sku || product._id,
+    productID: product._id,
+    category: categoryName,
     url: `${siteUrl}/products/${product._id}`,
-    brand: { '@type': 'Brand', name: 'Mentoos' },
+    brand: { '@type': 'Brand', name: product.brand?.name || 'Mentoos' },
     image: product.images?.map(img => absoluteImage(typeof img === 'string' ? img : img.url)) || [],
+    itemCondition: 'https://schema.org/NewCondition',
     offers: {
       '@type': 'Offer',
       price: product.price,
       priceCurrency: 'INR',
       availability: product.stock > 0 ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
       url: `${siteUrl}/products/${product._id}`,
+      seller: { '@type': 'Organization', name: 'Mentoos' },
+      priceValidUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
     },
     aggregateRating: product.averageRating && product.totalReviews ? {
       '@type': 'AggregateRating',
@@ -111,7 +122,10 @@ export default async function ProductDetailPage(props: ProductDetailPageProps) {
     itemListElement: [
       { '@type': 'ListItem', position: 1, name: 'Home', item: siteUrl },
       { '@type': 'ListItem', position: 2, name: 'Products', item: `${siteUrl}/products` },
-      { '@type': 'ListItem', position: 3, name: product.name, item: `${siteUrl}/products/${product._id}` },
+      ...(categorySlug
+        ? [{ '@type': 'ListItem', position: 3, name: categoryName, item: `${siteUrl}/categories/${categorySlug}` }]
+        : []),
+      { '@type': 'ListItem', position: categorySlug ? 4 : 3, name: product.name, item: `${siteUrl}/products/${product._id}` },
     ],
   };
 

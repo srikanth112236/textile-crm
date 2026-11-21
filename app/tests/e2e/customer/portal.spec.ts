@@ -97,7 +97,7 @@ test.describe('Customer portal & shopping flow', () => {
 
     await page.getByRole('button', { name: /Continue to Payment/i }).click();
     await expect(page.getByText('Payment Method').first()).toBeVisible();
-    await page.getByText(/Cash on Delivery/i).first().click();
+    await page.getByTestId('payment-cod').click();
     await page.getByRole('button', { name: /Continue to Review/i }).click();
 
     await expect(page.getByText('Review Your Order').first()).toBeVisible();

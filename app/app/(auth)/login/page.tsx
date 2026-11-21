@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useState, useEffect } from 'react';
+import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useRecaptcha } from '@/lib/hooks/useRecaptcha';
-import { UserRole } from '@/lib/types/roles';
+import { getRoleDashboard, getRoleLabel } from '@/lib/auth/roleHome';
 
 export default function LoginPage() {
   return (
@@ -21,7 +21,7 @@ export default function LoginPage() {
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { login, loginWithOtp, isAuthenticated, user } = useAuth();
+  const { login, loginWithOtp, isAuthenticated, isLoading, user, role, isStaff, logout } = useAuth();
   const { getRecaptchaToken } = useRecaptcha();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -32,23 +32,8 @@ function LoginForm() {
   const [code, setCode] = useState('');
   const [otpSent, setOtpSent] = useState(false);
 
-  // Redirect if already authenticated
-  useEffect(() => {
-    if (isAuthenticated && user) {
-      const role = (user as any)?.role;
-      const callbackUrl = searchParams.get('callbackUrl') || '/';
-      
-      if (role === UserRole.SUPERADMIN) {
-        router.push('/superadmin/dashboard');
-      } else if (role === UserRole.ADMIN) {
-        router.push('/admin/dashboard');
-      } else if (role === UserRole.USER) {
-        router.push('/user/dashboard');
-      } else {
-        router.push(callbackUrl);
-      }
-    }
-  }, [isAuthenticated, user, router, searchParams]);
+  const rawCallback = searchParams.get('callbackUrl') || '/';
+  const callbackUrl = rawCallback.startsWith('/') && !rawCallback.startsWith('/login') ? rawCallback : '/';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,11 +44,11 @@ function LoginForm() {
       // Get reCAPTCHA token (may be null if not configured - that's OK for dev)
       const recaptchaToken = await getRecaptchaToken();
       
-      // Use NextAuth signIn for session management
+      // Use NextAuth signIn for session management. Return to the page the
+      // shopper came from, never to a dashboard unless they chose it.
       await login(email, password);
-      
-      // The useEffect will handle the redirect based on role
-      // No need to manually redirect here
+      router.replace(callbackUrl);
+      router.refresh();
     } catch (err: any) {
       // Handle connection errors
       if (err.message?.includes('Backend server is not running')) {
@@ -99,12 +84,64 @@ function LoginForm() {
     setLoading(true);
     try {
       await loginWithOtp(phone, code);
+      router.replace(callbackUrl);
+      router.refresh();
     } catch (err: any) {
       setError(err.message || 'OTP login failed.');
     } finally {
       setLoading(false);
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="mx-auto max-w-md text-center text-sm text-muted-foreground py-12">
+        Checking your session…
+      </div>
+    );
+  }
+
+  if (isAuthenticated && user) {
+    return (
+      <div className="mx-auto max-w-md space-y-5 py-8 text-center">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-50 text-amber-700">
+          <span className="text-lg font-extrabold">{user.email?.charAt(0).toUpperCase() || 'M'}</span>
+        </div>
+        <div>
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-950">
+            You&apos;re already signed in
+          </h1>
+          <p className="mt-1 text-sm text-slate-600">
+            {user.email} · {getRoleLabel(role)}
+          </p>
+          {isStaff && (
+            <p className="mt-2 text-xs font-medium text-amber-700">
+              Staff accounts can browse the store but cannot shop.
+            </p>
+          )}
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
+          <Link href={callbackUrl}>
+            <Button className="w-full bg-slate-950 text-white hover:bg-amber-500 hover:text-slate-950 sm:w-auto">
+              Continue shopping
+            </Button>
+          </Link>
+          <Link href={getRoleDashboard(role)}>
+            <Button variant="outline" className="w-full sm:w-auto">
+              Go to dashboard
+            </Button>
+          </Link>
+        </div>
+        <button
+          type="button"
+          onClick={() => logout()}
+          className="text-xs font-semibold text-slate-500 underline underline-offset-2 hover:text-slate-900"
+        >
+          Sign out
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">

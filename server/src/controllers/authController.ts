@@ -109,6 +109,8 @@ export const register = async (
       },
       referralApplied,
       accessToken,
+      // Native clients (React Native has no cookie jar) refresh with this.
+      refreshToken,
     });
   } catch (error) {
     next(error);
@@ -173,6 +175,8 @@ export const login = async (
         mfaEnabled: user.mfaEnabled,
       },
       accessToken,
+      // Native clients (React Native has no cookie jar) refresh with this.
+      refreshToken,
     });
   } catch (error) {
     next(error);

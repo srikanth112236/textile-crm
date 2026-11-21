@@ -45,6 +45,12 @@ const nextConfig = {
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
           { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(self)' },
           { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
+          // Instagram Reels are embedded in a click-to-load iframe. Keep the
+          // frame source narrow; no Instagram script is loaded into our origin.
+          {
+            key: 'Content-Security-Policy',
+            value: "frame-src 'self' https://www.instagram.com https://*.instagram.com; frame-ancestors 'self';",
+          },
         ],
       },
     ];

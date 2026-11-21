@@ -4,10 +4,12 @@ import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { productsApi, ProductFilters } from '@/lib/api/products';
-import type { IProduct } from '@/lib/api/types';
+import type { IProduct, ICategory } from '@/lib/api/types';
+import { categoriesApi } from '@/lib/api/categories';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus, Search, Edit, Trash2, Filter, Copy, Loader2 } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Filter, Copy, Loader2, Upload, Download, Layers3 } from 'lucide-react';
+import { productImportApi } from '@/lib/api/productImport';
 import {
   AdminTable,
   AdminTableBody,
@@ -42,6 +44,15 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { KeyboardShortcutsModal } from '@/components/admin/KeyboardShortcutsModal';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
 
 export default function AdminProductsPage() {
   return (
@@ -79,6 +90,15 @@ function AdminProductsContent() {
   });
   const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
   const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkSaving, setBulkSaving] = useState(false);
+  const [bulkStatus, setBulkStatus] = useState('');
+  const [bulkCategory, setBulkCategory] = useState('');
+  const [bulkPricePct, setBulkPricePct] = useState('');
+  const [bulkStock, setBulkStock] = useState('');
+  const [categories, setCategories] = useState<ICategory[]>([]);
   
   // Cache for product counts with timestamp
   const [countsCache, setCountsCache] = useState<{
@@ -87,6 +107,34 @@ function AdminProductsContent() {
   }>({ data: {}, timestamp: 0 });
   
   const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const blob = await productImportApi.exportCatalogue({
+        status: filters.status,
+        search: filters.search,
+        category: (filters as any).category,
+      });
+      const url = window.URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `mentoos-products-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.URL.revokeObjectURL(url);
+      toast({ title: 'Export ready', description: 'The filtered catalogue has been downloaded.' });
+    } catch (error: any) {
+      toast({
+        title: 'Export failed',
+        description: error?.response?.data?.error || error?.message || 'Could not export the catalogue.',
+        variant: 'destructive',
+      });
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const fetchProducts = async () => {
     setLoading(true);
@@ -102,6 +150,94 @@ function AdminProductsContent() {
       console.error('Failed to fetch products:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!bulkOpen || categories.length > 0) return;
+    categoriesApi.getCategories('active')
+      .then((response) => setCategories(response.data || []))
+      .catch(() => setCategories([]));
+  }, [bulkOpen, categories.length]);
+
+  const flatCategories = (() => {
+    const out: Array<{ id: string; name: string; depth: number }> = [];
+    const walk = (list: ICategory[], depth = 0) => {
+      for (const category of list || []) {
+        out.push({ id: category._id, name: category.name, depth });
+        if (category.children?.length) walk(category.children, depth + 1);
+      }
+    };
+    walk(categories);
+    return out;
+  })();
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+  };
+
+  const toggleSelectAll = () => {
+    const pageIds = products.map((product) => product._id);
+    const allSelected = pageIds.length > 0 && pageIds.every((id) => selectedIds.includes(id));
+    setSelectedIds(allSelected ? [] : pageIds);
+  };
+
+  const applyBulkEdit = async () => {
+    if (selectedIds.length === 0) return;
+    const hasStatus = Boolean(bulkStatus);
+    const hasCategory = Boolean(bulkCategory);
+    const pricePct = bulkPricePct.trim() === '' ? null : Number(bulkPricePct);
+    const stockValue = bulkStock.trim() === '' ? null : Number(bulkStock);
+
+    if (!hasStatus && !hasCategory && pricePct === null && stockValue === null) {
+      toast({ title: 'Nothing to update', description: 'Choose at least one bulk change.', variant: 'destructive' });
+      return;
+    }
+    if (pricePct !== null && !Number.isFinite(pricePct)) {
+      toast({ title: 'Invalid price change', description: 'Use a number, e.g. -10 or 15.', variant: 'destructive' });
+      return;
+    }
+    if (stockValue !== null && (!Number.isInteger(stockValue) || stockValue < 0)) {
+      toast({ title: 'Invalid stock', description: 'Stock must be a whole number >= 0.', variant: 'destructive' });
+      return;
+    }
+
+    setBulkSaving(true);
+    try {
+      const updates = selectedIds.map((id) => {
+        const product = products.find((p) => p._id === id);
+        const data: Partial<IProduct> = {};
+        if (hasStatus) data.status = bulkStatus as IProduct['status'];
+        if (hasCategory) data.category = bulkCategory;
+        if (pricePct !== null && product) {
+          data.price = Math.max(0, Math.round(product.price * (1 + pricePct / 100)));
+        }
+        if (stockValue !== null) data.stock = stockValue;
+        return productsApi.updateProduct(id, data);
+      });
+      const results = await Promise.allSettled(updates);
+      const failed = results.filter((result) => result.status === 'rejected').length;
+      const updated = results.length - failed;
+      toast({
+        title: failed > 0 ? `${updated} updated, ${failed} failed` : `${updated} products updated`,
+        description: failed > 0 ? 'Some products could not be updated. Check variant stock rules.' : 'Bulk edit applied.',
+        variant: failed > 0 ? 'destructive' : undefined,
+      });
+      setSelectedIds([]);
+      setBulkOpen(false);
+      setBulkStatus('');
+      setBulkCategory('');
+      setBulkPricePct('');
+      setBulkStock('');
+      await fetchProducts();
+    } catch (error: any) {
+      toast({
+        title: 'Bulk edit failed',
+        description: error?.response?.data?.error || error?.message || 'Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setBulkSaving(false);
     }
   };
 
@@ -385,6 +521,8 @@ function AdminProductsContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery, router]);
 
+  const allSelected = products.length > 0 && products.every((product) => selectedIds.includes(product._id));
+
   return (
     <div className="container mx-auto px-3 py-4 max-w-7xl">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
@@ -392,12 +530,24 @@ function AdminProductsContent() {
           <h1 className="text-xl font-bold tracking-tight">Products</h1>
           <p className="text-muted-foreground mt-1">Manage your product catalog</p>
         </div>
-        <Link href="/admin/products/new">
-          <Button>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Product
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={handleExport} disabled={exporting}>
+            {exporting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+            {exporting ? 'Exporting…' : 'Export CSV'}
           </Button>
-        </Link>
+          <Link href="/admin/products/import">
+            <Button variant="outline">
+              <Upload className="h-4 w-4 mr-2" />
+              Import CSV/XLSX
+            </Button>
+          </Link>
+          <Link href="/admin/products/new">
+            <Button>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Product
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* Search and Filter Bar */}
@@ -466,9 +616,34 @@ function AdminProductsContent() {
         </div>
       ) : (
         <>
+          {selectedIds.length > 0 && (
+            <div className="sticky top-2 z-30 mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5 shadow-sm">
+              <div className="flex items-center gap-2 text-xs font-bold text-amber-950">
+                <Layers3 className="h-4 w-4" />
+                {selectedIds.length} selected
+              </div>
+              <div className="flex items-center gap-2">
+                <Button size="sm" className="h-8 bg-slate-950 text-xs text-white hover:bg-amber-500 hover:text-slate-950" onClick={() => setBulkOpen(true)}>
+                  Bulk edit
+                </Button>
+                <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => setSelectedIds([])}>
+                  Clear selection
+                </Button>
+              </div>
+            </div>
+          )}
           <AdminTable>
             <AdminTableHeader>
               <AdminTableRow>
+                    <AdminTableHead className="w-10">
+                      <input
+                        type="checkbox"
+                        aria-label="Select all products on this page"
+                        checked={allSelected}
+                        onChange={toggleSelectAll}
+                        className="h-4 w-4 rounded border-slate-300 accent-amber-500"
+                      />
+                    </AdminTableHead>
                     <AdminTableHead>Image</AdminTableHead>
                     <AdminTableHead>Name</AdminTableHead>
                     <AdminTableHead>SKU</AdminTableHead>
@@ -480,7 +655,16 @@ function AdminProductsContent() {
             </AdminTableHeader>
             <AdminTableBody>
                   {products.map((product) => (
-                    <AdminTableRow key={product._id}>
+                    <AdminTableRow key={product._id} className={selectedIds.includes(product._id) ? 'bg-amber-50/60' : ''}>
+                      <AdminTableCell>
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${product.name}`}
+                          checked={selectedIds.includes(product._id)}
+                          onChange={() => toggleSelect(product._id)}
+                          className="h-4 w-4 rounded border-slate-300 accent-amber-500"
+                        />
+                      </AdminTableCell>
                       <AdminTableCell>
                         {product.images && product.images.length > 0 ? (() => {
                           // Handle both string and object formats for images
@@ -653,6 +837,96 @@ function AdminProductsContent() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Bulk Edit Dialog */}
+      <Dialog open={bulkOpen} onOpenChange={setBulkOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Bulk edit {selectedIds.length} products</DialogTitle>
+            <DialogDescription>
+              Only the fields you set here will change. Leave a field blank to keep it as-is.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 py-2">
+            <div>
+              <Label htmlFor="bulk-status">Status</Label>
+              <select
+                id="bulk-status"
+                value={bulkStatus}
+                onChange={(e) => setBulkStatus(e.target.value)}
+                className="mt-1 h-9 w-full rounded-lg border border-input bg-background px-3 text-sm"
+              >
+                <option value="">No change</option>
+                <option value="active">Active</option>
+                <option value="draft">Draft</option>
+                <option value="inactive">Inactive</option>
+                <option value="discontinued">Discontinued</option>
+              </select>
+            </div>
+
+            <div>
+              <Label htmlFor="bulk-category">Category</Label>
+              <select
+                id="bulk-category"
+                value={bulkCategory}
+                onChange={(e) => setBulkCategory(e.target.value)}
+                className="mt-1 h-9 w-full rounded-lg border border-input bg-background px-3 text-sm"
+              >
+                <option value="">No change</option>
+                {flatCategories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {'— '.repeat(category.depth)}{category.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="bulk-price">Price change (%)</Label>
+                <Input
+                  id="bulk-price"
+                  type="number"
+                  placeholder="e.g. -10"
+                  value={bulkPricePct}
+                  onChange={(e) => setBulkPricePct(e.target.value)}
+                  className="mt-1 h-9"
+                />
+              </div>
+              <div>
+                <Label htmlFor="bulk-stock">Set stock</Label>
+                <Input
+                  id="bulk-stock"
+                  type="number"
+                  min={0}
+                  placeholder="e.g. 50"
+                  value={bulkStock}
+                  onChange={(e) => setBulkStock(e.target.value)}
+                  className="mt-1 h-9"
+                />
+              </div>
+            </div>
+
+            <p className="text-[11px] leading-relaxed text-muted-foreground">
+              Products with variants derive stock and price from their variant SKUs; use the variant editor for those.
+            </p>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkOpen(false)} disabled={bulkSaving}>
+              Cancel
+            </Button>
+            <Button
+              onClick={applyBulkEdit}
+              disabled={bulkSaving || selectedIds.length === 0}
+              className="bg-slate-950 text-white hover:bg-amber-500 hover:text-slate-950"
+            >
+              {bulkSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Applying…</> : 'Apply to selected'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Keyboard Shortcuts Modal */}
       <KeyboardShortcutsModal open={shortcutsModalOpen} onOpenChange={setShortcutsModalOpen} />

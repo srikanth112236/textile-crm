@@ -5,38 +5,59 @@ import path from 'path';
 export const CUSTOMER = { email: 'test.user@mentoos.in', password: 'Test@1234' };
 export const ADMIN = { email: 'admin@ecom.com', password: 'Admin123!@#' };
 
-/** Wait until React has hydrated the page (props attached to DOM nodes). */
+/** Wait until React has hydrated the login form (props attached to a field). */
 async function waitForHydration(page: Page) {
   await page.waitForFunction(
     () => {
-      const form = document.querySelector('form');
-      if (!form) return false;
-      return Object.keys(form).some((key) => key.startsWith('__reactProps$'));
+      // The login screen uses a div-based form in some layouts, so anchor on
+      // the field itself rather than document.querySelector('form').
+      const field = document.querySelector('#email') || document.querySelector('form input');
+      if (!field) return false;
+      return Object.keys(field).some((key) => key.startsWith('__reactProps$'));
     },
     null,
     { timeout: 60_000 }
   );
 }
 
-/** Sign in through the real UI and wait until the backend access token is stored. */
+/**
+ * Sign in through the real UI.
+ *
+ * P1 removed the automatic dashboard redirect: a shopper returns to `/` or
+ * the callback page. The helper therefore waits for the access token, not a
+ * dashboard URL. Tests that need a dashboard navigate there explicitly.
+ */
 export async function loginAs(page: Page, email: string, password: string) {
+  // Keep the cookie banner from covering the primary action during tests.
+  await page.addInitScript(() => {
+    try { localStorage.setItem('cookie-consent-accepted', 'true'); } catch { /* ignore */ }
+  });
+
   for (let attempt = 1; attempt <= 2; attempt++) {
     await page.goto('/login', { waitUntil: 'domcontentloaded' });
-    await waitForHydration(page);
 
-    const accept = page.getByRole('button', { name: 'Accept All Cookies' });
-    if (await accept.isVisible().catch(() => false)) {
-      await accept.click().catch(() => {});
+    // Wait for either the form or the already-signed-in card. Checking
+    // visibility immediately after goto races React hydration.
+    await page.waitForFunction(
+      () => !!document.querySelector('#email') || /already signed in/i.test(document.body.innerText),
+      null,
+      { timeout: 60_000 }
+    );
+
+    // A retry can land on the already-signed-in card. In that case the
+    // session is already usable.
+    if (await page.locator('#email').isVisible().catch(() => false)) {
+      await waitForHydration(page);
+      await page.locator('#email').fill(email);
+      await page.locator('#password').fill(password);
+      await page.getByRole('button', { name: 'Sign in', exact: true }).click();
     }
 
-    await page.locator('#email').fill(email);
-    await page.locator('#password').fill(password);
-    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-
     try {
-      await page.waitForURL(/\/(user|admin|superadmin)\/dashboard/, { timeout: 30_000 });
-      await page.waitForFunction(() => !!localStorage.getItem('accessToken'), null, { timeout: 20_000 });
-      await expect(page.locator('body')).not.toContainText('Invalid credentials');
+      await page.waitForFunction(() => !!localStorage.getItem('accessToken'), null, {
+        timeout: 40_000,
+      });
+      await expect(page.locator('body')).not.toContainText(/invalid credentials|incorrect/i);
       return;
     } catch (error) {
       if (attempt === 2) throw error;
@@ -47,9 +68,10 @@ export async function loginAs(page: Page, email: string, password: string) {
 
 export function collectPageErrors(page: Page) {
   const errors: string[] = [];
+  const apiUrl = process.env.PLAYWRIGHT_API_URL || 'http://localhost:5000';
   page.on('pageerror', (err) => errors.push(`pageerror: ${err.message}`));
   page.on('response', (res) => {
-    if (res.url().includes(':5000/api') && res.status() >= 500) {
+    if (res.url().startsWith(`${apiUrl}/api`) && res.status() >= 500) {
       errors.push(`API ${res.status()}: ${res.url()}`);
     }
   });
@@ -79,12 +101,13 @@ export async function expectNoHorizontalOverflow(page: Page) {
 
 /** Clear the customer's cart via the API so tests don't leak state. */
 export async function clearCart(page: Page) {
-  await page.evaluate(async () => {
+  const apiUrl = process.env.PLAYWRIGHT_API_URL || 'http://localhost:5000';
+  await page.evaluate(async (baseUrl) => {
     const token = localStorage.getItem('accessToken');
     if (!token) return;
-    await fetch('http://localhost:5000/api/cart', {
+    await fetch(`${baseUrl}/api/cart`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` },
     });
-  });
+  }, apiUrl);
 }

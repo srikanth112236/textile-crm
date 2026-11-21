@@ -30,6 +30,9 @@ import {
   CheckCircle2,
   Settings2,
   Sparkles,
+  Upload,
+  Image as ImageIcon,
+  Activity,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { productsApi } from '@/lib/api/products';
@@ -55,9 +58,11 @@ const sections: NavSection[] = [
           { title: 'Drafts', href: '/admin/products?status=draft', icon: FileText, countKey: 'draft' },
           { title: 'Low Stock', href: '/admin/products?lowStock=true', icon: AlertTriangle, countKey: 'lowStock' },
           { title: 'Recently Added', href: '/admin/products?recent=true', icon: Clock, countKey: 'recent' },
+          { title: 'Import CSV', href: '/admin/products/import', icon: Upload },
         ],
       },
       { title: 'Categories', href: '/admin/categories', icon: FolderTree },
+      { title: 'Media & SEO', href: '/admin/media', icon: ImageIcon },
       { title: 'Tags', href: '/admin/tags', icon: Tag },
       { title: 'Reviews', href: '/admin/reviews', icon: MessageSquare, countKey: 'pendingReviews' },
       { title: 'Shop the Look', href: '/admin/shop-look', icon: LayoutGrid },
@@ -114,6 +119,7 @@ const sections: NavSection[] = [
         ],
       },
       { title: 'Audit Logs', href: '/admin/logs', icon: FileText },
+      { title: 'System Health', href: '/admin/system', icon: Activity },
       { title: 'Permissions', href: '/admin/permissions', icon: Shield },
       { title: 'Store Settings', href: '/admin/settings', icon: Settings2 },
     ],

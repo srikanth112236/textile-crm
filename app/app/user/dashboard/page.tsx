@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { Card, CardContent } from '@/components/ui/card';
 import LoyaltyPointsCard from '@/components/loyalty/LoyaltyPointsCard';
 import ReferralCard from '@/components/referral/ReferralCard';
+import { PriceAlertsCard } from '@/components/user/PriceAlertsCard';
 
 const CARDS = [
   { href: '/user/profile', icon: UserCircle, title: 'My Profile', desc: 'Profile & addresses', tone: 'bg-primary/10 text-primary' },
@@ -44,9 +45,10 @@ export default function UserDashboard() {
         ))}
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2 mt-4">
+      <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
         <LoyaltyPointsCard />
         <ReferralCard />
+        <PriceAlertsCard />
       </div>
 
       <Card className="mt-4">

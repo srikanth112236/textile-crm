@@ -45,7 +45,7 @@ export const Reviews: React.FC<ReviewsProps> = ({ productId }) => {
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState('');
   const [showLoginModal, setShowLoginModal] = useState(false);
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, isCustomer, user } = useAuth();
   const { toast } = useToast();
 
   useEffect(() => {
@@ -169,7 +169,7 @@ export const Reviews: React.FC<ReviewsProps> = ({ productId }) => {
       </div>
 
       {/* Review Form */}
-      {isAuthenticated && (
+      {isCustomer && (
         <Card className="mb-8">
           <CardHeader>
             <CardTitle>Write a Review</CardTitle>
@@ -276,8 +276,7 @@ export const Reviews: React.FC<ReviewsProps> = ({ productId }) => {
       <LoginModal
         open={showLoginModal}
         onOpenChange={setShowLoginModal}
-        title="Login to Write a Review"
-        description="You need to be logged in to submit a product review."
+        action="review"
       />
     </div>
   );

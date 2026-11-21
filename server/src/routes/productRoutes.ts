@@ -27,17 +27,21 @@ import {
   bulkUpdateVariantStock,
   getProductVariants,
   duplicateProduct,
+  resolveInstagramMedia,
 } from '../controllers/productController';
 import { authenticate, optionalAuthenticate } from '../middleware/auth';
 import { requireAdmin } from '../middleware/rbac';
 
 const router = express.Router();
 
-// Public routes
-router.get('/', getProducts);
+// Public listing, but optionally authenticated so admin/superadmin can see
+// drafts and inactive products in the admin catalogue.
+router.get('/', optionalAuthenticate, getProducts);
 router.get('/search', searchProducts);
 router.get('/filters', getProductFilters);
 router.get('/reviews/featured', getFeaturedReviews);
+// Admin media helper must be registered before /:id.
+router.post('/media/instagram/resolve', authenticate, requireAdmin, resolveInstagramMedia);
 // Get single product - optionally authenticated (for admin/superadmin to see drafts)
 router.get('/:id', optionalAuthenticate, getProduct);
 // Get recommendations

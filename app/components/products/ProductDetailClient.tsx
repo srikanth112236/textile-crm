@@ -45,6 +45,8 @@ import { SizeGuideModal } from './SizeGuideModal';
 import { FindMySize } from './FindMySize';
 import { RecentlyViewed } from './RecentlyViewed';
 import { FloatingProductVideo } from './FloatingProductVideo';
+import { InstagramEmbedModal } from './InstagramEmbedModal';
+import { parseInstagramUrl } from '@/lib/media/instagram';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { FrequentlyBoughtTogether } from './FrequentlyBoughtTogether';
@@ -78,6 +80,7 @@ export function ProductDetailClient({ product }: ProductDetailClientProps) {
   const [showNotifyModal, setShowNotifyModal] = useState(false);
   const [notifyContact, setNotifyContact] = useState('');
   const [showVideo, setShowVideo] = useState(false);
+  const [showInstagramVideo, setShowInstagramVideo] = useState(false);
   const [freeShipThreshold, setFreeShipThreshold] = useState(999);
   const [flatShippingCost, setFlatShippingCost] = useState(50);
   const [showSizeGuide, setShowSizeGuide] = useState(false);
@@ -177,7 +180,18 @@ export function ProductDetailClient({ product }: ProductDetailClientProps) {
   const mainImageUrl = typeof mainImageObj === 'string' ? mainImageObj : mainImageObj.url;
   const displayImageUrl = mainImageUrl.includes('/uploads/') ? `/api/images${mainImageUrl}` : mainImageUrl;
 
-  const floatingVideo = (product.videos || []).find((v) => v?.url && v.enabled !== false);
+  const primaryVideo = (product.videos || []).find((v) => v?.url && v.enabled !== false);
+  const primaryVideoInstagram = parseInstagramUrl(primaryVideo?.url) ||
+    (primaryVideo?.embedUrl
+      ? {
+          embedUrl: primaryVideo.embedUrl,
+          sourceUrl: primaryVideo.sourceUrl || primaryVideo.url,
+          shortcode: primaryVideo.shortcode || '',
+        }
+      : null);
+  const floatingVideo = (product.videos || []).find(
+    (v) => v?.url && v.enabled !== false && v.provider !== 'instagram' && !v.embedUrl
+  );
 
   const isOutOfStock = product.stock === 0 || product.status === 'out_of_stock';
   const isLowStock = product.stock > 0 && product.stock <= (product.lowStockThreshold || 10);
@@ -368,11 +382,11 @@ export function ProductDetailClient({ product }: ProductDetailClientProps) {
 
           {/* Main Image with Hover Zoom Effect */}
           <div className="relative flex-1 order-1 sm:order-2">
-            {showVideo && product.videos && product.videos.length > 0 ? (
+            {showVideo && primaryVideo && !primaryVideoInstagram ? (
               <div className="relative aspect-square w-full rounded-3xl overflow-hidden bg-slate-950 border border-slate-200 dark:border-slate-800 shadow-xl">
                 <video
-                  src={product.videos[0].url}
-                  poster={product.videos[0].thumbnailUrl || displayImageUrl}
+                  src={primaryVideo.url}
+                  poster={primaryVideo.thumbnailUrl || displayImageUrl}
                   controls
                   playsInline
                   className="w-full h-full object-contain"
@@ -391,12 +405,16 @@ export function ProductDetailClient({ product }: ProductDetailClientProps) {
               onMouseLeave={handleMouseLeave}
               className="relative aspect-square w-full rounded-3xl overflow-hidden bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 cursor-crosshair group shadow-xl"
             >
-              {product.videos && product.videos.length > 0 && (
+              {primaryVideo && (
                 <button
-                  onClick={() => setShowVideo(true)}
+                  onClick={() => {
+                    if (primaryVideoInstagram) setShowInstagramVideo(true);
+                    else setShowVideo(true);
+                  }}
                   className="absolute bottom-3 right-3 z-10 text-[11px] font-bold bg-slate-900/80 text-white px-3 py-1.5 rounded-full flex items-center gap-1.5 hover:bg-amber-500 hover:text-slate-950 transition-colors"
                 >
-                  <Play className="w-3.5 h-3.5 fill-current" /> Watch video
+                  <Play className="w-3.5 h-3.5 fill-current" />
+                  {primaryVideoInstagram ? 'Watch Reel' : 'Watch video'}
                 </button>
               )}
               <Image
@@ -801,7 +819,18 @@ export function ProductDetailClient({ product }: ProductDetailClientProps) {
         </DialogContent>
       </Dialog>
 
-      {/* Draggable floating product video */}
+      <InstagramEmbedModal
+        open={showInstagramVideo}
+        onClose={() => setShowInstagramVideo(false)}
+        embedUrl={primaryVideoInstagram?.embedUrl}
+        sourceUrl={primaryVideoInstagram?.sourceUrl}
+        title={primaryVideo?.title || product.name}
+        aspectRatio={primaryVideo?.aspectRatio === '1:1' ? '1:1' : '9:16'}
+        productId={product._id}
+        placement="pdp"
+      />
+
+      {/* Draggable floating product video (uploaded files only) */}
       {floatingVideo && (
         <FloatingProductVideo
           src={floatingVideo.url}

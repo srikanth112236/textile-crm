@@ -8,6 +8,8 @@ import { productsApi } from '@/lib/api/products';
 import { useCart } from '@/lib/contexts/CartContext';
 import { useToast } from '@/hooks/use-toast';
 import { LoginModal } from '@/components/auth/LoginModal';
+import { useAuth } from '@/lib/hooks/useAuth';
+import { trackEvent } from '@/lib/analytics/events';
 import { formatPrice, cn } from '@/lib/utils';
 import type { IProduct } from '@/lib/api/types';
 
@@ -60,8 +62,10 @@ function imgOf(p: any): string {
 // Black T-Shirt → Casual Trouser + more, with ADD ALL TO CART.
 export function CompleteTheLook({ productId }: { productId: string }) {
   const { addItem, requiresAuth } = useCart();
+  const { isStaff } = useAuth();
   const { toast } = useToast();
   const [loginOpen, setLoginOpen] = useState(false);
+  const [pendingItems, setPendingItems] = useState<any[] | null>(null);
   const [main, setMain] = useState<any>(null);
   const [picks, setPicks] = useState<any[]>([]);
   const [checked, setChecked] = useState<Record<string, boolean>>({});
@@ -123,7 +127,25 @@ export function CompleteTheLook({ productId }: { productId: string }) {
   const total = selected.reduce((s, p) => s + (p.price || 0), 0);
 
   const handleAddAll = async () => {
+    if (isStaff) {
+      trackEvent('staff_commerce_blocked', { surface: 'add_to_cart' });
+      toast({
+        title: 'Customer account required',
+        description: 'Staff accounts cannot shop. Use the dashboard or sign in as a customer.',
+      });
+      return;
+    }
     if (requiresAuth()) {
+      setPendingItems(
+        selected.map((p: any) => {
+          const size = firstAvailableSize(p);
+          return {
+            productId: p._id,
+            quantity: 1,
+            ...(size ? { variations: [{ name: 'Size', value: size }] } : {}),
+          };
+        })
+      );
       setLoginOpen(true);
       return;
     }
@@ -191,7 +213,12 @@ export function CompleteTheLook({ productId }: { productId: string }) {
           {adding ? 'Adding…' : `ADD ALL TO CART (${selected.length})`}
         </Button>
       </div>
-      <LoginModal open={loginOpen} onOpenChange={setLoginOpen} title="Login to Shop" description="Login or register to add the look to your cart." />
+      <LoginModal
+        open={loginOpen}
+        onOpenChange={setLoginOpen}
+        action="cart"
+        pendingAction={pendingItems ? { type: 'add_many', items: pendingItems } : null}
+      />
     </>
   );
 }

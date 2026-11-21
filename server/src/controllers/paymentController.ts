@@ -11,6 +11,7 @@ import {
   isRazorpayConfigured,
 } from '../services/razorpay';
 import { emitToUser, emitToAdmins } from '../config/socket';
+import { requireCustomer } from '../utils/requireCustomer';
 import {
   RefundError,
   createOrderRefund,
@@ -45,6 +46,7 @@ export const createPaymentOrder = async (req: Request, res: Response): Promise<v
       res.status(401).json({ error: 'Authentication required' });
       return;
     }
+    if (!requireCustomer(req, res)) return;
     if (!isRazorpayConfigured()) {
       res.status(503).json({ error: 'Razorpay not configured. Admin must set RAZORPAY_KEY_ID/SECRET in server/.env and enable in Settings.' });
       return;
@@ -124,6 +126,7 @@ export const verifyPayment = async (req: Request, res: Response): Promise<void> 
       res.status(400).json({ error: 'Validation error', details: error.details.map((d) => d.message) });
       return;
     }
+    if (!requireCustomer(req, res)) return;
     const valid = verifyRazorpaySignature(value.razorpayOrderId, value.razorpayPaymentId, value.razorpaySignature);
     if (!valid) {
       await Payment.findOneAndUpdate(

@@ -3,11 +3,12 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Zap } from 'lucide-react';
+import { Lock, Zap } from 'lucide-react';
 import { useCart } from '@/lib/contexts/CartContext';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { LoginModal } from '@/components/auth/LoginModal';
+import { trackEvent } from '@/lib/analytics/events';
 
 interface BuyNowButtonProps {
   productId: string;
@@ -17,11 +18,11 @@ interface BuyNowButtonProps {
   className?: string;
 }
 
-// Buy Now: add to cart (with size/color) then jump straight to checkout
+// Buy Now: sign in, add the exact size/colour line, then jump to checkout.
 export function BuyNowButton({ productId, quantity = 1, variations, disabled, className }: BuyNowButtonProps) {
   const router = useRouter();
-  const { addItem, requiresAuth } = useCart();
-  const { isAuthenticated, isCustomer } = useAuth();
+  const { addItem } = useCart();
+  const { isAuthenticated, isStaff } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
@@ -29,28 +30,22 @@ export function BuyNowButton({ productId, quantity = 1, variations, disabled, cl
   const handleBuyNow = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    // Staff (admin/superadmin) are dashboard-only and cannot shop.
-    if (isAuthenticated && !isCustomer) {
-      toast({ title: 'Customers only', description: 'Shopping actions are for customer accounts. Staff, please use the dashboard.', variant: 'destructive' });
+
+    if (isStaff) {
+      trackEvent('staff_commerce_blocked', { surface: 'buy_now', productId });
+      toast({
+        title: 'Customer account required',
+        description: 'Staff accounts cannot shop. Use the dashboard or sign in as a customer.',
+      });
       return;
     }
-    // Guests get express checkout too: guest bag → guest checkout (no login wall).
+
+    // Login is compulsory for every shopping action.
     if (!isAuthenticated) {
-      setLoading(true);
-      try {
-        const { addToGuestCart } = await import('@/lib/guestCart');
-        await addToGuestCart(productId, quantity, variations);
-        router.push('/checkout?guest=1');
-      } finally {
-        setLoading(false);
-      }
-      return;
-    }
-    // Login compulsory for any shopping action
-    if (requiresAuth()) {
       setShowLogin(true);
       return;
     }
+
     setLoading(true);
     try {
       const ok = await addItem(productId, quantity, variations);
@@ -61,13 +56,33 @@ export function BuyNowButton({ productId, quantity = 1, variations, disabled, cl
     }
   };
 
+  if (isStaff) {
+    return (
+      <Button
+        type="button"
+        variant="outline"
+        disabled={disabled}
+        className={className}
+        onClick={handleBuyNow}
+      >
+        <Lock className="mr-2 h-4 w-4" />
+        Customer account required
+      </Button>
+    );
+  }
+
   return (
     <>
       <Button onClick={handleBuyNow} disabled={disabled || loading} className={className} size="default">
         <Zap className="mr-2 h-4 w-4" />
         {loading ? 'Going to checkout…' : 'Buy Now'}
       </Button>
-      <LoginModal open={showLogin} onOpenChange={setShowLogin} title="Login for Express Checkout" description="Login to use Buy Now express checkout." />
+      <LoginModal
+        open={showLogin}
+        onOpenChange={setShowLogin}
+        action="checkout"
+        pendingAction={{ type: 'buy_now', productId, quantity, variations }}
+      />
     </>
   );
 }

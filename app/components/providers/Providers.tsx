@@ -1,6 +1,6 @@
 'use client';
 
-import { ReactNode } from 'react';
+import { ReactNode, Suspense } from 'react';
 import { SessionProvider } from './SessionProvider';
 import { RecaptchaProvider } from './RecaptchaProvider';
 import { SocketProvider } from '@/lib/contexts/SocketContext';
@@ -12,6 +12,8 @@ import CookieConsent from '@/components/gdpr/CookieConsent';
 import NotificationToast from '@/components/notifications/NotificationToast';
 import RateLimitNotice from '@/components/notifications/RateLimitNotice';
 import { AuthSessionManager } from './AuthSessionManager';
+import { AuthPromptListener } from '@/components/auth/AuthPromptListener';
+import { PendingActionRunner } from '@/components/auth/PendingActionRunner';
 
 /**
  * Combined provider component for all client-side providers
@@ -27,6 +29,10 @@ export function Providers({ children }: { children: ReactNode }) {
               <CompareProvider>
                 {children}
                 <AuthSessionManager />
+                <PendingActionRunner />
+                <Suspense fallback={null}>
+                  <AuthPromptListener />
+                </Suspense>
                 <CompareDrawer />
                 <CookieConsent />
                 <NotificationToast />

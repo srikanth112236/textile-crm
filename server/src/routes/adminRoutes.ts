@@ -10,6 +10,7 @@ import {
   createPermission,
   updateRolePermissions,
 } from '../controllers/adminController';
+import { getSystemHealth } from '../controllers/systemController';
 import { authenticate } from '../middleware/auth';
 import { requireAdmin, requireSuperadmin } from '../middleware/rbac';
 
@@ -27,6 +28,9 @@ router.post('/users/:id/unban', requireAdmin, unbanUser);
 
 // Audit logs (Admin/Superadmin)
 router.get('/logs', requireAdmin, getAuditLogs);
+
+// System health (Admin/Superadmin)
+router.get('/system/health', requireAdmin, getSystemHealth);
 
 // Permissions (Superadmin only)
 router.get('/permissions', requireSuperadmin, getPermissions);

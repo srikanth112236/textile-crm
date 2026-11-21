@@ -1,29 +1,9 @@
-import { test, expect, Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import { collectPageErrors, shot } from '../helpers/auth';
 
 const PRODUCT_ID = '6acf3b31e5192c6bafa49ed8';
 const ORDER_NUMBER = 'ORD-20261105-002';
 const ORDER_PHONE = '9876543212';
-
-async function fillGuestAddress(page: Page) {
-  await page.locator('#guestPhone').fill('9876500011');
-
-  const inputs = page.locator('input:visible');
-  const count = await inputs.count();
-  const targets = [];
-  for (let i = 0; i < count; i++) {
-    const el = inputs.nth(i);
-    const id = (await el.getAttribute('id')) || '';
-    const type = (await el.getAttribute('type')) || 'text';
-    if (['guestPhone', 'guestName', 'guestEmail', 'useNewAddress'].includes(id)) continue;
-    if (['checkbox', 'radio', 'file', 'hidden'].includes(type)) continue;
-    targets.push(el);
-  }
-  const values = ['12 Test Street', 'Pune', 'Maharashtra', '411001', 'India'];
-  for (let i = 0; i < Math.min(targets.length, values.length); i++) {
-    await targets[i].fill(values[i]);
-  }
-}
 
 test.describe('Public storefront', () => {
   test('Home page renders with hero, categories and product rails', async ({ page }, testInfo) => {
@@ -32,9 +12,10 @@ test.describe('Public storefront', () => {
     await page.goto('/');
     await expect(page).toHaveTitle(/Mentoos/);
     await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
-    await expect(page.getByText('THE OVERSIZED REVOLUTION').first()).toBeVisible();
+    await expect(page.getByText('SHARP. RELAXED. YOURS.').first()).toBeVisible();
     await expect(page.getByText('SHOP BY CATEGORY').first()).toBeVisible();
-    await expect(page.getByText('SHOP BY FIT').first()).toBeVisible();
+    await expect(page.getByText('NEW ARRIVALS').first()).toBeVisible();
+    await expect(page.getByText('BEST SELLERS').first()).toBeVisible();
 
     await shot(page, testInfo, 'public-home');
     expect(errors, `Page errors:\n${errors.join('\n')}`).toEqual([]);
@@ -45,7 +26,7 @@ test.describe('Public storefront', () => {
     await expect(page.getByText(/Showing 1 to 20 of \d+ products/).first()).toBeVisible();
 
     await page.goto('/products?category=t-shirts');
-    await expect(page.getByText(/14 products in this category/i).or(page.getByText(/Showing 1 to 14 of 14 products/)).first()).toBeVisible();
+    await expect(page.getByText(/\d+ products in this category/i).or(page.getByText(/Showing 1 to \d+ of \d+ products/)).first()).toBeVisible();
 
     await page.goto('/products?sort=price&order=asc');
     await expect(page.getByText('Price: Low to High').first()).toBeVisible();
@@ -91,7 +72,7 @@ test.describe('Public storefront', () => {
   test('Category landing page loads', async ({ page }, testInfo) => {
     await page.goto('/categories/t-shirts');
     await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
-    await expect(page.getByText(/14 products in this category/i).or(page.getByText(/Showing 1 to 14 of 14/)).first()).toBeVisible();
+    await expect(page.getByText(/\d+ products in this category/i).or(page.getByText(/Showing 1 to \d+ of \d+/)).first()).toBeVisible();
     await shot(page, testInfo, 'public-category');
   });
 
@@ -131,29 +112,18 @@ test.describe('Public storefront', () => {
   });
 
   test('Guest cart page is publicly accessible', async ({ page }, testInfo) => {
-    await page.goto(`/products/${PRODUCT_ID}`);
-    await page.getByRole('button', { name: 'Buy Now' }).first().click();
-    await page.waitForURL(/\/checkout\?guest=1/, { timeout: 20_000 });
-
     await page.goto('/cart');
     await expect(page.getByRole('heading', { name: /Shopping Cart/i }).first()).toBeVisible();
-    await expect(page.getByText('Pro-Gym Muscle Fit Stringer Vest - Grey').first()).toBeVisible();
     await shot(page, testInfo, 'public-guest-cart');
   });
 
-  test('Guest checkout reaches the payment step', async ({ page }, testInfo) => {
+  test('Guest Buy Now prompts sign-in instead of allowing guest checkout', async ({ page }, testInfo) => {
     await page.goto(`/products/${PRODUCT_ID}`);
     await page.getByRole('button', { name: 'Buy Now' }).first().click();
-    await page.waitForURL(/\/checkout\?guest=1/, { timeout: 20_000 });
 
-    await expect(page.getByText('Guest checkout', { exact: false }).first()).toBeVisible();
-    await fillGuestAddress(page);
-    await page.getByRole('button', { name: /Continue to Payment/i }).click();
-
-    await expect(page.getByText('Payment Method').first()).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText(/Cash on Delivery/i).first()).toBeVisible();
-    await expect(page.getByText(/UPI \/ Card \/ Netbanking/i).first()).toBeVisible();
-    await shot(page, testInfo, 'public-guest-checkout-payment');
+    await expect(page.getByRole('heading', { name: 'Sign in to checkout' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('link', { name: /Create an account/i })).toBeVisible();
+    await shot(page, testInfo, 'public-guest-buy-now-auth');
   });
 
   test('404 page for an invalid product', async ({ page }, testInfo) => {

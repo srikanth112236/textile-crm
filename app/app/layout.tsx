@@ -2,8 +2,6 @@ import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 import { Providers } from '@/components/providers/Providers';
-import { AuthPromptListener } from '@/components/auth/AuthPromptListener';
-import { Suspense } from 'react';
 import { Toaster } from '@/components/ui/toaster';
 import { Analytics } from '@/components/analytics/Analytics';
 
@@ -84,9 +82,6 @@ export default function RootLayout({
           Skip to content
         </a>
         <Providers>{children}</Providers>
-        <Suspense fallback={null}>
-          <AuthPromptListener />
-        </Suspense>
         <Toaster />
         <Analytics />
       </body>

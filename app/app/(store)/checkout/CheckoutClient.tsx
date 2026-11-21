@@ -560,19 +560,30 @@ export default function CheckoutClient() {
                 {!methods?.razorpayConfigured && (
                   <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs">Razorpay keys not configured yet — online payments will fail. COD/Manual still works. Admin: set RAZORPAY_KEY_ID/SECRET.</div>
                 )}
-                {[
-                  { id: 'razorpay', icon: Smartphone, title: 'UPI / Card / Netbanking / Wallet', desc: 'Via Razorpay — fastest confirmation', disabled: false, tag: 'Recommended' },
-                  { id: 'cod', icon: Banknote, title: `Cash on Delivery${codQuote && codQuote.advance > 0 ? ` (pay ${formatPrice(codQuote.advance)} advance now)` : ''}`, desc: codQuote && !codQuote.codAllowed ? codQuote.reason : codQuote && codQuote.advance > 0 ? `${codQuote.reason ? codQuote.reason + '. ' : ''}Balance ${formatPrice(codQuote.balance)} on delivery.` : 'Pay full amount on delivery', disabled: !!codQuote && !codQuote.codAllowed },
-                  { id: 'manual', icon: ShieldCheck, title: 'Manual / Pay Later', desc: 'Admin confirms payment later', disabled: false },
-                ].map((m) => (
-                  <div key={m.id} onClick={() => { if (!m.disabled) setPaymentMethod(m.id); }} className={`p-3.5 border rounded-xl flex gap-3 transition-all ${m.disabled ? 'opacity-50 cursor-not-allowed' : `cursor-pointer ${paymentMethod === m.id ? 'border-amber-500 bg-amber-500/5 shadow-sm' : 'border-border hover:border-amber-500/50'}`}`}>
-                    <span className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 ${paymentMethod === m.id && !m.disabled ? 'border-amber-500' : 'border-muted-foreground/40'}`}>
-                      {paymentMethod === m.id && !m.disabled && <span className="h-2 w-2 rounded-full bg-amber-500" />}
-                    </span>
-                    <m.icon className="h-5 w-5 mt-0 shrink-0 text-amber-600" />
-                    <div className="min-w-0"><div className="font-bold text-sm flex items-center gap-2 flex-wrap">{m.title}{'tag' in m && (m as any).tag && <span className="text-[10px] font-black uppercase bg-amber-500 text-slate-950 rounded-md px-1.5 py-0.5">{(m as any).tag}</span>}</div><div className="text-xs text-muted-foreground mt-0.5">{m.desc}</div></div>
-                  </div>
-                ))}
+                <div role="radiogroup" aria-label="Payment method" className="space-y-3">
+                  {[
+                    { id: 'razorpay', icon: Smartphone, title: 'UPI / Card / Netbanking / Wallet', desc: 'Via Razorpay — fastest confirmation', disabled: false, tag: 'Recommended' },
+                    { id: 'cod', icon: Banknote, title: `Cash on Delivery${codQuote && codQuote.advance > 0 ? ` (pay ${formatPrice(codQuote.advance)} advance now)` : ''}`, desc: codQuote && !codQuote.codAllowed ? codQuote.reason : codQuote && codQuote.advance > 0 ? `${codQuote.reason ? codQuote.reason + '. ' : ''}Balance ${formatPrice(codQuote.balance)} on delivery.` : 'Pay full amount on delivery', disabled: !!codQuote && !codQuote.codAllowed },
+                    { id: 'manual', icon: ShieldCheck, title: 'Manual / Pay Later', desc: 'Admin confirms payment later', disabled: false },
+                  ].map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={paymentMethod === m.id}
+                      disabled={m.disabled}
+                      data-testid={`payment-${m.id}`}
+                      onClick={() => { if (!m.disabled) setPaymentMethod(m.id); }}
+                      className={`w-full text-left p-3.5 border rounded-xl flex gap-3 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/40 ${m.disabled ? 'opacity-50 cursor-not-allowed' : `cursor-pointer ${paymentMethod === m.id ? 'border-amber-500 bg-amber-500/5 shadow-sm' : 'border-border hover:border-amber-500/50'}`}`}
+                    >
+                      <span className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 ${paymentMethod === m.id && !m.disabled ? 'border-amber-500' : 'border-muted-foreground/40'}`}>
+                        {paymentMethod === m.id && !m.disabled && <span className="h-2 w-2 rounded-full bg-amber-500" />}
+                      </span>
+                      <m.icon className="h-5 w-5 mt-0 shrink-0 text-amber-600" />
+                      <div className="min-w-0"><div className="font-bold text-sm flex items-center gap-2 flex-wrap">{m.title}{'tag' in m && (m as any).tag && <span className="text-[10px] font-black uppercase bg-amber-500 text-slate-950 rounded-md px-1.5 py-0.5">{(m as any).tag}</span>}</div><div className="text-xs text-muted-foreground mt-0.5">{m.desc}</div></div>
+                    </button>
+                  ))}
+                </div>
                 <div className="flex gap-2 text-[11px] text-muted-foreground items-center"><Wallet className="h-3.5 w-3.5" /> UPI <Landmark className="h-3.5 w-3.5 ml-2" /> Netbanking <CreditCard className="h-3.5 w-3.5 ml-2" /> Cards — all processed securely by Razorpay. No card data touches our servers.</div>
                 <div className="flex gap-4">
                   <Button variant="outline" onClick={() => setCurrentStep('address')}><ArrowLeft className="h-4 w-4 mr-2" />Back</Button>

@@ -2,13 +2,14 @@
 
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Heart } from 'lucide-react';
+import { Heart, Lock } from 'lucide-react';
 import { addToWishlist, removeFromWishlist, checkWishlist } from '@/lib/api/wishlist';
 import { LoginModal } from '@/components/auth/LoginModal';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { useWishlist } from '@/lib/contexts/WishlistContext';
 import { cn } from '@/lib/utils';
+import { trackEvent } from '@/lib/analytics/events';
 
 interface WishlistButtonProps {
   productId: string;
@@ -23,7 +24,7 @@ export const WishlistButton: React.FC<WishlistButtonProps> = ({
   size = 'icon',
   variant = 'ghost',
 }) => {
-  const { isAuthenticated, isCustomer } = useAuth();
+  const { isAuthenticated, isCustomer, isStaff } = useAuth();
   const { isInWishlist: checkInWishlist, addItem, removeItem } = useWishlist();
   const [isInWishlist, setIsInWishlist] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -83,8 +84,12 @@ export const WishlistButton: React.FC<WishlistButtonProps> = ({
     }
 
     // Staff (admin/superadmin) are dashboard-only and cannot shop.
-    if (!isCustomer) {
-      toast({ title: 'Customers only', description: 'Wishlist is for customer accounts. Staff, please use the dashboard.', variant: 'destructive' });
+    if (isStaff || !isCustomer) {
+      trackEvent('staff_commerce_blocked', { surface: 'wishlist', productId });
+      toast({
+        title: 'Customer account required',
+        description: 'Wishlist is for customer accounts. Staff, please use the dashboard.',
+      });
       return;
     }
 
@@ -111,6 +116,27 @@ export const WishlistButton: React.FC<WishlistButtonProps> = ({
       setLoading(false);
     }
   };
+
+  if (isStaff) {
+    return (
+      <Button
+        variant="ghost"
+        size={size}
+        className={cn('text-amber-700 hover:bg-amber-50', className)}
+        aria-label="Customer account required for wishlist"
+        title="Customer account required"
+        onClick={() => {
+          trackEvent('staff_commerce_blocked', { surface: 'wishlist', productId });
+          toast({
+            title: 'Customer account required',
+            description: 'Wishlist is for customer accounts. Staff, please use the dashboard.',
+          });
+        }}
+      >
+        <Lock className="h-4 w-4" />
+      </Button>
+    );
+  }
 
   if (checking) {
     return (
@@ -146,8 +172,8 @@ export const WishlistButton: React.FC<WishlistButtonProps> = ({
       <LoginModal
         open={showLoginModal}
         onOpenChange={setShowLoginModal}
-        title="Login to Save to Wishlist"
-        description="You need to be logged in to save items to your wishlist."
+        action="wishlist"
+        pendingAction={{ type: 'wishlist_add', productId }}
       />
     </>
   );

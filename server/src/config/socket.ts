@@ -6,7 +6,7 @@ import { allowedOrigins } from './origins';
 
 let io: SocketIOServer | null = null;
 
-export const initializeSocket = (httpServer: HTTPServer): SocketIOServer => {
+export const initializeSocket = async (httpServer: HTTPServer): Promise<SocketIOServer> => {
   if (io) {
     return io; // Return existing instance if already initialized
   }
@@ -20,13 +20,21 @@ export const initializeSocket = (httpServer: HTTPServer): SocketIOServer => {
     transports: ['websocket', 'polling'],
   });
 
-  // Use Redis adapter for scaling (if Redis is available)
+  // Use Redis adapter for scaling (if Redis is available).
+  // Both duplicate clients are lazy, so they must be connected explicitly
+  // before createAdapter subscribes; otherwise ioredis throws "Stream isn't
+  // writeable" when Redis happens to be ready at boot.
   if (redisClient && redisClient.status === 'ready') {
-    const pubClient = redisClient;
+    const pubClient = redisClient.duplicate();
     const subClient = redisClient.duplicate();
 
-    io.adapter(createAdapter(pubClient, subClient));
-    console.log('✅ Socket.io Redis adapter connected');
+    try {
+      await Promise.all([pubClient.connect(), subClient.connect()]);
+      io.adapter(createAdapter(pubClient, subClient));
+      console.log('✅ Socket.io Redis adapter connected');
+    } catch (error) {
+      console.warn('⚠️  Socket.io Redis adapter unavailable, using single instance mode:', error);
+    }
   } else {
     console.warn('⚠️  Socket.io running without Redis adapter (single instance mode)');
   }

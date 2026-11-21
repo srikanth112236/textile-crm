@@ -53,10 +53,14 @@ export const getInstagramFeed = async (_req: Request, res: Response): Promise<vo
 
 const upsertSchema = Joi.object({
   source: Joi.string().valid('customer', 'instagram', 'admin').default('admin'),
-  mediaType: Joi.string().valid('image', 'video').default('video'),
+  mediaType: Joi.string().valid('image', 'video', 'reel').default('video'),
   mediaUrl: Joi.string().trim().required().max(1000),
   thumbnailUrl: Joi.string().trim().optional().allow(''),
   permalink: Joi.string().trim().optional().allow(''),
+  provider: Joi.string().valid('upload', 'instagram').optional(),
+  shortcode: Joi.string().trim().optional().allow(''),
+  embedUrl: Joi.string().trim().optional().allow(''),
+  aspectRatio: Joi.string().valid('9:16', '1:1').optional(),
   customerName: Joi.string().trim().max(100).optional().allow(''),
   caption: Joi.string().trim().max(500).optional().allow(''),
   productId: Joi.string().regex(/^[0-9a-fA-F]{24}$/).optional().allow('', null),
@@ -109,15 +113,16 @@ export const updateUgc = async (req: Request, res: Response): Promise<void> => {
       res.status(400).json({ error: 'Validation error', details: error.details.map((d) => d.message) });
       return;
     }
-    const item = await UgcItem.findByIdAndUpdate(
-      req.params.id,
-      { ...value, productId: value.productId ? new mongoose.Types.ObjectId(value.productId) : undefined },
-      { new: true }
-    );
+    const item = await UgcItem.findById(req.params.id);
     if (!item) {
       res.status(404).json({ error: 'UGC item not found' });
       return;
     }
+    item.set({
+      ...value,
+      productId: value.productId ? new mongoose.Types.ObjectId(value.productId) : undefined,
+    });
+    await item.save();
     await safeRedisOperation(async () => {
       await redisClient.del(FEATURED_CACHE_KEY);
       await redisClient.del(FEED_CACHE_KEY);

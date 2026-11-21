@@ -5,6 +5,7 @@ import { ReturnRequest, RmaStatus, RmaType } from '../models/ReturnRequest';
 import { Order, OrderStatus } from '../models/Order';
 import { emitToUser, emitToAdmins } from '../config/socket';
 import { RefundError, createOrderRefund } from '../services/refunds';
+import { requireCustomer } from '../utils/requireCustomer';
 
 const itemSchema = Joi.object({
   productId: Joi.string().regex(/^[0-9a-fA-F]{24}$/).required(),
@@ -42,6 +43,7 @@ export const createReturnRequest = async (req: Request, res: Response): Promise<
       return;
     }
     const userId = req.user?.userId;
+    if (!requireCustomer(req, res)) return;
     const order = await Order.findById(value.orderId);
     if (!order || order.userId.toString() !== userId) {
       res.status(404).json({ error: 'Order not found' });

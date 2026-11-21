@@ -1,11 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { Button } from '@/components/ui/button';
-import { UserRole } from '@/lib/types/roles';
 import { 
   Search, 
   ShoppingBag, 
@@ -19,7 +18,9 @@ import {
   Sparkles,
   ChevronDown,
   ArrowRight,
-  Flame
+  ShieldCheck,
+  LayoutDashboard,
+  Package,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -34,6 +35,10 @@ import { useCart } from '@/lib/contexts/CartContext';
 import { useWishlist } from '@/lib/contexts/WishlistContext';
 import { TopAnnouncementBar } from '@/components/store/TopAnnouncementBar';
 import { SmartSearchModal } from '@/components/search/SmartSearchModal';
+import { getRoleDashboard, getRoleLabel } from '@/lib/auth/roleHome';
+import { StaffModeBanner } from '@/components/auth/StaffModeBanner';
+import { categoriesApi } from '@/lib/api/categories';
+import type { ICategory } from '@/lib/api/types';
 
 interface MegaMenuData {
   title: string;
@@ -139,8 +144,10 @@ const NAV_ITEMS = [
   { key: 'sale', name: 'Sale', href: '/products?sort=price&order=asc', isSale: true },
 ];
 
+const HEADER_CATEGORY_ORDER = ['t-shirts', 'shirts', 'trousers', 'joggers', 'activewear', 'ethnic-wear'];
+
 export function Header() {
-  const { user, logout, isAuthenticated } = useAuth();
+  const { user, logout, isAuthenticated, isStaff, role } = useAuth();
   const { itemCount } = useCart();
   const { itemCount: wishlistCount } = useWishlist();
 
@@ -148,6 +155,16 @@ export function Header() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [activeMegaKey, setActiveMegaKey] = useState<string | null>(null);
   const [guestCount, setGuestCount] = useState(0);
+  const [categoryTree, setCategoryTree] = useState<ICategory[]>([]);
+
+  // Navigation is data-driven. The curated fallback keeps the header stable
+  // while the category request is in flight or if the backend is cold.
+  useEffect(() => {
+    categoriesApi
+      .getCategories('active')
+      .then((response) => setCategoryTree(response.data || []))
+      .catch(() => setCategoryTree([]));
+  }, []);
 
   // Guest bag count for non-logged-in shoppers
   useEffect(() => {
@@ -181,18 +198,72 @@ export function Header() {
     return 'M';
   };
 
-  const getDashboardLink = (role?: string) => {
-    switch (role) {
-      case UserRole.SUPERADMIN:
-        return '/superadmin/dashboard';
-      case UserRole.ADMIN:
-        return '/admin/dashboard';
-      case UserRole.USER:
-        return '/user/dashboard';
-      default:
-        return '/';
+  const dashboardLink = getRoleDashboard(role);
+
+  const { navItems, megaMenus } = useMemo(() => {
+    const fallbackMenus: Record<string, MegaMenuData> = { ...MEGA_MENU_DATA };
+    const topLevel = categoryTree
+      .filter((category) => !category.parent)
+      .sort((a, b) => {
+        const ai = HEADER_CATEGORY_ORDER.indexOf(a.slug);
+        const bi = HEADER_CATEGORY_ORDER.indexOf(b.slug);
+        return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+      })
+      .slice(0, 6);
+
+    if (topLevel.length < 3) {
+      return { navItems: NAV_ITEMS, megaMenus: fallbackMenus };
     }
-  };
+
+    const menus: Record<string, MegaMenuData> = { ...fallbackMenus };
+    const categoryItems: Array<{
+      key: string;
+      name: string;
+      href: string;
+      megaKey: string;
+      isHot?: boolean;
+      isSale?: boolean;
+    }> = [];
+
+    for (const category of topLevel) {
+      const href = `/products?category=${category.slug}`;
+      const fallback = MEGA_MENU_DATA[category.slug];
+      const children = category.children || [];
+      const image = category.image && !String(category.image).includes('placeholder')
+        ? (category.image.startsWith('/') ? `/api/images${category.image}` : category.image)
+        : fallback?.featuredImage || MEGA_MENU_DATA['t-shirts'].featuredImage;
+
+      menus[category.slug] = {
+        title: category.name,
+        subcategories: children.length > 0
+          ? children.slice(0, 6).map((child) => ({
+              name: child.name,
+              href: `/products?category=${child.slug}`,
+            }))
+          : fallback?.subcategories || [{ name: `Shop all ${category.name}`, href }],
+        featuredImage: image,
+        featuredTitle: category.name.toUpperCase(),
+        featuredSubtitle: category.description || fallback?.featuredSubtitle || `Shop ${category.name}`,
+        featuredLink: href,
+      };
+
+      categoryItems.push({
+        key: category.slug,
+        name: category.name,
+        href,
+        megaKey: category.slug,
+      });
+    }
+
+    const newArrivals = NAV_ITEMS[0];
+    const bestSellers = NAV_ITEMS[NAV_ITEMS.length - 2];
+    const sale = NAV_ITEMS[NAV_ITEMS.length - 1];
+
+    return {
+      navItems: [newArrivals, ...categoryItems, bestSellers, sale],
+      megaMenus: menus,
+    };
+  }, [categoryTree]);
 
   return (
     <>
@@ -221,11 +292,17 @@ export function Header() {
                   MEN'S FASHION
                 </span>
               </Link>
+              {isStaff && (
+                <span className="hidden items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-1 text-[10px] font-extrabold uppercase tracking-wide text-amber-800 sm:inline-flex">
+                  <ShieldCheck className="h-3 w-3" />
+                  Staff
+                </span>
+              )}
             </div>
 
             {/* Middle: Single-line Desktop Navigation with Segregated Mega Menu */}
             <nav className="hidden xl:flex items-center gap-0 min-w-0" onMouseLeave={() => setActiveMegaKey(null)} aria-label="Primary">
-              {NAV_ITEMS.map((item) => (
+              {navItems.map((item) => (
                 <div
                   key={item.key}
                   className="relative shrink-0"
@@ -255,7 +332,7 @@ export function Header() {
                   </Link>
 
                   {/* Segregated Mega Menu: Shop-by column + Featured column */}
-                  {item.megaKey && activeMegaKey === item.megaKey && MEGA_MENU_DATA[item.megaKey] && (
+                  {item.megaKey && activeMegaKey === item.megaKey && megaMenus[item.megaKey] && (
                     <div 
                       className="absolute left-1/2 -translate-x-1/2 top-full w-[480px] bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 p-4 z-50 animate-in fade-in slide-in-from-top-2 duration-200 flex gap-4"
                       onMouseEnter={() => setActiveMegaKey(item.megaKey)}
@@ -264,10 +341,10 @@ export function Header() {
                       <div className="flex-1 min-w-0">
                         <h4 className="text-[10px] font-bold uppercase tracking-widest text-slate-400 flex items-center gap-1 pb-2 mb-1 border-b border-slate-100 dark:border-slate-800">
                           <Sparkles className="w-3 h-3 text-amber-500" />
-                          Shop {MEGA_MENU_DATA[item.megaKey].title}
+                          Shop {megaMenus[item.megaKey].title}
                         </h4>
                         <ul className="space-y-0.5">
-                          {MEGA_MENU_DATA[item.megaKey].subcategories.map((sub, idx) => (
+                          {megaMenus[item.megaKey].subcategories.map((sub, idx) => (
                             <li key={idx}>
                               <Link
                                 href={sub.href}
@@ -281,7 +358,7 @@ export function Header() {
                           ))}
                         </ul>
                         <Link
-                          href={MEGA_MENU_DATA[item.megaKey].featuredLink}
+                          href={megaMenus[item.megaKey].featuredLink}
                           onClick={() => setActiveMegaKey(null)}
                           className="mt-2 inline-flex items-center text-[10px] font-bold text-amber-600 hover:underline gap-1 px-2"
                         >
@@ -293,21 +370,21 @@ export function Header() {
                       {/* Col 2 — Featured card */}
                       <div className="w-44 relative rounded-xl overflow-hidden shadow-md group shrink-0 min-h-[220px]">
                         <Image
-                          src={MEGA_MENU_DATA[item.megaKey].featuredImage}
-                          alt={MEGA_MENU_DATA[item.megaKey].featuredTitle}
+                          src={megaMenus[item.megaKey].featuredImage}
+                          alt={megaMenus[item.megaKey].featuredTitle}
                           fill
                           className="object-cover group-hover:scale-105 transition-transform duration-500"
                           sizes="176px"
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent p-3 flex flex-col justify-end text-white">
                           <span className="text-[9px] font-bold text-amber-400 tracking-wider uppercase">
-                            {MEGA_MENU_DATA[item.megaKey].featuredSubtitle}
+                            {megaMenus[item.megaKey].featuredSubtitle}
                           </span>
                           <h5 className="text-[11px] font-extrabold tracking-tight mt-0.5 leading-tight">
-                            {MEGA_MENU_DATA[item.megaKey].featuredTitle}
+                            {megaMenus[item.megaKey].featuredTitle}
                           </h5>
                           <Link
-                            href={MEGA_MENU_DATA[item.megaKey].featuredLink}
+                            href={megaMenus[item.megaKey].featuredLink}
                             onClick={() => setActiveMegaKey(null)}
                             className="mt-1.5 inline-flex items-center text-[10px] font-bold text-amber-400 hover:underline gap-1"
                           >
@@ -337,33 +414,38 @@ export function Header() {
                 </span>
               </button>
 
-              {/* Wishlist Link */}
-              <Link 
-                href="/user/wishlist" 
-                className="relative p-1.5 text-slate-700 dark:text-slate-300 hover:text-rose-500 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                aria-label={wishlistCount > 0 ? `Wishlist, ${wishlistCount} items` : 'Wishlist'}
-              >
-                <Heart className="h-4 w-4" />
-                {wishlistCount > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 h-3.5 min-w-3.5 px-0.5 rounded-full bg-rose-500 text-white text-[9px] font-extrabold flex items-center justify-center">
-                    {wishlistCount}
-                  </span>
-                )}
-              </Link>
+              {/* Staff are dashboard-only: no customer commerce icons. */}
+              {!isStaff && (
+                <>
+                  {/* Wishlist Link */}
+                  <Link
+                    href="/user/wishlist"
+                    className="relative p-1.5 text-slate-700 dark:text-slate-300 hover:text-rose-500 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                    aria-label={wishlistCount > 0 ? `Wishlist, ${wishlistCount} items` : 'Wishlist'}
+                  >
+                    <Heart className="h-4 w-4" />
+                    {wishlistCount > 0 && (
+                      <span className="absolute -top-0.5 -right-0.5 h-3.5 min-w-3.5 px-0.5 rounded-full bg-rose-500 text-white text-[9px] font-extrabold flex items-center justify-center">
+                        {wishlistCount}
+                      </span>
+                    )}
+                  </Link>
 
-              {/* Cart Drawer Link */}
-              <Link 
-                href="/cart" 
-                className="relative p-1.5 text-slate-700 dark:text-slate-300 hover:text-amber-500 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                aria-label={(itemCount + guestCount) > 0 ? `Shopping Cart, ${itemCount + guestCount} items` : 'Shopping Cart'}
-              >
-                <ShoppingBag className="h-4 w-4" />
-                {(itemCount + guestCount) > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 h-3.5 min-w-3.5 px-0.5 rounded-full bg-amber-500 text-slate-950 text-[9px] font-extrabold flex items-center justify-center">
-                    {itemCount + guestCount}
-                  </span>
-                )}
-              </Link>
+                  {/* Cart Link */}
+                  <Link
+                    href="/cart"
+                    className="relative p-1.5 text-slate-700 dark:text-slate-300 hover:text-amber-500 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                    aria-label={(itemCount + guestCount) > 0 ? `Shopping Cart, ${itemCount + guestCount} items` : 'Shopping Cart'}
+                  >
+                    <ShoppingBag className="h-4 w-4" />
+                    {(itemCount + guestCount) > 0 && (
+                      <span className="absolute -top-0.5 -right-0.5 h-3.5 min-w-3.5 px-0.5 rounded-full bg-amber-500 text-slate-950 text-[9px] font-extrabold flex items-center justify-center">
+                        {itemCount + guestCount}
+                      </span>
+                    )}
+                  </Link>
+                </>
+              )}
 
               {/* Account Dropdown */}
               {isAuthenticated ? (
@@ -378,36 +460,65 @@ export function Header() {
                       </Avatar>
                     </button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-56 p-2 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800">
+                  <DropdownMenuContent align="end" className="w-60 p-2 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800">
                     <DropdownMenuLabel className="px-3 py-2">
                       <div className="flex flex-col space-y-0.5">
                         <p className="text-xs font-bold truncate">{user?.email}</p>
-                        <p className="text-[10px] uppercase font-bold text-amber-500">{user?.role || 'Customer'}</p>
+                        <p className="text-[10px] uppercase font-bold text-amber-600">
+                          {getRoleLabel(role)}
+                        </p>
                       </div>
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem asChild>
-                      <Link href={getDashboardLink(user?.role)} className="flex items-center px-3 py-2 text-xs font-semibold cursor-pointer rounded-xl hover:bg-amber-500/10">
-                        <UserCircle className="mr-2.5 h-4 w-4 text-amber-500" />
-                        <span>Dashboard</span>
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link href="/user/profile" className="flex items-center px-3 py-2 text-xs font-semibold cursor-pointer rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800">
-                        <User className="mr-2.5 h-4 w-4" />
-                        <span>Profile & Addresses</span>
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link href="/user/orders" className="flex items-center px-3 py-2 text-xs font-semibold cursor-pointer rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800">
-                        <ShoppingBag className="mr-2.5 h-4 w-4" />
-                        <span>My Orders</span>
-                      </Link>
-                    </DropdownMenuItem>
+
+                    {isStaff ? (
+                      <>
+                        <DropdownMenuItem asChild>
+                          <Link href={dashboardLink} className="flex items-center px-3 py-2 text-xs font-semibold cursor-pointer rounded-xl hover:bg-amber-500/10">
+                            <LayoutDashboard className="mr-2.5 h-4 w-4 text-amber-500" />
+                            <span>Go to dashboard</span>
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                          <Link href="/admin/products" className="flex items-center px-3 py-2 text-xs font-semibold cursor-pointer rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800">
+                            <Package className="mr-2.5 h-4 w-4" />
+                            <span>Manage products</span>
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                          <Link href="/admin/orders" className="flex items-center px-3 py-2 text-xs font-semibold cursor-pointer rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800">
+                            <ShoppingBag className="mr-2.5 h-4 w-4" />
+                            <span>Manage orders</span>
+                          </Link>
+                        </DropdownMenuItem>
+                      </>
+                    ) : (
+                      <>
+                        <DropdownMenuItem asChild>
+                          <Link href={dashboardLink} className="flex items-center px-3 py-2 text-xs font-semibold cursor-pointer rounded-xl hover:bg-amber-500/10">
+                            <UserCircle className="mr-2.5 h-4 w-4 text-amber-500" />
+                            <span>Dashboard</span>
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                          <Link href="/user/profile" className="flex items-center px-3 py-2 text-xs font-semibold cursor-pointer rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800">
+                            <User className="mr-2.5 h-4 w-4" />
+                            <span>Profile &amp; Addresses</span>
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                          <Link href="/user/orders" className="flex items-center px-3 py-2 text-xs font-semibold cursor-pointer rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800">
+                            <ShoppingBag className="mr-2.5 h-4 w-4" />
+                            <span>My Orders</span>
+                          </Link>
+                        </DropdownMenuItem>
+                      </>
+                    )}
+
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={handleLogout} className="flex items-center px-3 py-2 text-xs font-semibold cursor-pointer text-rose-500 hover:bg-rose-50 rounded-xl">
                       <LogOut className="mr-2.5 h-4 w-4" />
-                      <span>Logout</span>
+                      <span>Sign out</span>
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -433,7 +544,7 @@ export function Header() {
         {isMobileMenuOpen && (
           <div className="xl:hidden border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-4 py-3 space-y-2">
             <div className="grid grid-cols-2 gap-2">
-              {NAV_ITEMS.map((cat, i) => (
+              {navItems.map((cat, i) => (
                 <Link
                   key={i}
                   href={cat.href}
@@ -447,6 +558,8 @@ export function Header() {
           </div>
         )}
       </header>
+
+      <StaffModeBanner />
 
       {/* Smart Search Modal */}
       <SmartSearchModal

@@ -11,6 +11,7 @@ test.describe('Authentication setup', () => {
     const page = await context.newPage();
 
     await loginAs(page, CUSTOMER.email, CUSTOMER.password);
+    await page.goto('/user/dashboard');
     await expect(page).toHaveURL(/\/user\/dashboard/);
     await context.storageState({ path: `${AUTH_DIR}/customer.json` });
     await context.close();
@@ -22,6 +23,7 @@ test.describe('Authentication setup', () => {
     const page = await context.newPage();
 
     await loginAs(page, ADMIN.email, ADMIN.password);
+    await page.goto('/superadmin/dashboard');
     await expect(page).toHaveURL(/\/superadmin\/dashboard/);
     await context.storageState({ path: `${AUTH_DIR}/admin.json` });
     await context.close();

@@ -94,15 +94,21 @@ export const useAuth = () => {
   const isAuthenticated = status === 'authenticated';
   const isLoading = status === 'loading';
   // Staff (admin/superadmin) are dashboard-only: they may browse the public
-  // site but must not shop. Only role 'user' (customers) may cart/wishlist/order.
+  // site but must not cart, wishlist, review or order. Only role 'user'
+  // (customers) may shop. These booleans are the UI contract; the API keeps
+  // its own `requireCustomer` guard as the source of truth.
   const userRole = (session?.user as any)?.role as string | undefined;
+  const role = userRole;
   const isCustomer = isAuthenticated && (!userRole || userRole === 'user');
+  const isStaff = isAuthenticated && !isCustomer;
 
   return {
     session,
     user: session?.user,
     userRole,
+    role,
     isCustomer,
+    isStaff,
     login,
     loginWithOtp,
     logout,

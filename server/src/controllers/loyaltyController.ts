@@ -3,6 +3,7 @@ import { User } from '../models/User';
 import { Order, OrderStatus } from '../models/Order';
 import Joi from 'joi';
 import { AuditLog, AuditAction } from '../models/AuditLog';
+import { requireCustomer } from '../utils/requireCustomer';
 
 // Configuration: Points earned per dollar spent
 const POINTS_PER_DOLLAR = 1; // 1 point per $1
@@ -78,6 +79,7 @@ export const getLoyaltyHistory = async (req: Request, res: Response): Promise<vo
 export const redeemPoints = async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = (req as any).user?.userId || (req as any).user?.id;
+    if (!requireCustomer(req, res)) return;
 
     const { error, value } = redeemPointsSchema.validate(req.body);
     if (error) {

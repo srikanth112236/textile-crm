@@ -157,6 +157,8 @@ export const verifyOtp = async (req: Request, res: Response): Promise<void> => {
       message: 'OTP login successful',
       user: { id: user._id, email: user.email, phone: user.phone, role: user.role, mfaEnabled: user.mfaEnabled },
       accessToken,
+      // Native clients (React Native has no cookie jar) refresh with this.
+      refreshToken,
     });
   } catch (err) {
     console.error('Verify OTP error:', err);

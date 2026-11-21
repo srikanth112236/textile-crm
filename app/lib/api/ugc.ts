@@ -3,10 +3,14 @@ import apiClient from './client';
 export interface UgcItem {
   _id: string;
   source: 'customer' | 'instagram' | 'admin';
-  mediaType: 'image' | 'video';
+  mediaType: 'image' | 'video' | 'reel';
   mediaUrl: string;
   thumbnailUrl?: string;
   permalink?: string;
+  provider?: 'upload' | 'instagram';
+  shortcode?: string;
+  embedUrl?: string;
+  aspectRatio?: '9:16' | '1:1';
   customerName?: string;
   caption?: string;
   likes?: number;

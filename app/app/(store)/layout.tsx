@@ -1,6 +1,7 @@
 import { Suspense } from 'react';
 import { Header } from '@/components/navigation/Header';
 import { Footer } from '@/components/navigation/Footer';
+import { StaffGuard } from '@/components/auth/StaffGuard';
 
 export default function StoreLayout({
   children,
@@ -11,9 +12,11 @@ export default function StoreLayout({
     <>
       <Header />
       <main id="main-content" className="min-h-screen">
-        <Suspense fallback={<div className="container mx-auto px-4 py-8 text-sm text-muted-foreground">Loading…</div>}>
-          {children}
-        </Suspense>
+        <StaffGuard>
+          <Suspense fallback={<div className="container mx-auto px-4 py-8 text-sm text-muted-foreground">Loading…</div>}>
+            {children}
+          </Suspense>
+        </StaffGuard>
       </main>
       <Footer />
     </>

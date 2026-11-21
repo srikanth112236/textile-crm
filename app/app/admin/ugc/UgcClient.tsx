@@ -8,7 +8,8 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { Instagram, Star, Trash2, Loader2 } from 'lucide-react';
+import { Instagram, Star, Trash2, Loader2, CheckCircle2 } from 'lucide-react';
+import { looksLikeInstagram, parseInstagramUrl } from '@/lib/media/instagram';
 
 export default function UgcClient() {
   const { toast } = useToast();
@@ -16,6 +17,7 @@ export default function UgcClient() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [form, setForm] = useState({ mediaUrl: '', customerName: '', caption: '', productId: '', mediaType: 'video' });
+  const draftInstagram = parseInstagramUrl(form.mediaUrl);
 
   useEffect(() => {
     load();
@@ -53,6 +55,10 @@ export default function UgcClient() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (looksLikeInstagram(form.mediaUrl) && !draftInstagram) {
+      toast({ title: 'Invalid Instagram URL', description: 'Paste a Reel, Post or TV link.', variant: 'destructive' });
+      return;
+    }
     try {
       await ugcApi.create({ mediaUrl: form.mediaUrl, customerName: form.customerName || undefined, caption: form.caption || undefined, productId: form.productId || undefined, mediaType: form.mediaType as 'video' | 'image', featured: true } as any);
       setForm({ mediaUrl: '', customerName: '', caption: '', productId: '', mediaType: 'video' });
@@ -94,7 +100,25 @@ export default function UgcClient() {
         <CardHeader><CardTitle className="text-base">Add UGC (customer video/image)</CardTitle><CardDescription>Paste media URL, link a product ID for Shop This Look, auto-featured.</CardDescription></CardHeader>
         <CardContent>
           <form onSubmit={handleCreate} className="grid sm:grid-cols-2 gap-3">
-            <div className="sm:col-span-2"><Label>Media URL *</Label><Input value={form.mediaUrl} onChange={(e) => setForm({ ...form, mediaUrl: e.target.value })} placeholder="https://…mp4 or image" required /></div>
+            <div className="sm:col-span-2">
+              <Label>Media URL *</Label>
+              <Input
+                value={form.mediaUrl}
+                onChange={(e) => setForm({ ...form, mediaUrl: e.target.value })}
+                placeholder="https://…mp4, image, or Instagram Reel link"
+                required
+              />
+              {draftInstagram ? (
+                <p className="mt-1 flex items-center gap-1.5 text-[11px] font-bold text-emerald-700">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  Instagram {draftInstagram.mediaType} detected · {draftInstagram.shortcode}
+                </p>
+              ) : looksLikeInstagram(form.mediaUrl) ? (
+                <p className="mt-1 text-[11px] font-semibold text-rose-700">
+                  Not a valid Instagram Reel, Post or TV URL.
+                </p>
+              ) : null}
+            </div>
             <div><Label>Customer handle</Label><Input value={form.customerName} onChange={(e) => setForm({ ...form, customerName: e.target.value })} placeholder="@rohit_fit" /></div>
             <div><Label>Product ID (for Shop This Look)</Label><Input value={form.productId} onChange={(e) => setForm({ ...form, productId: e.target.value })} placeholder="Mongo ObjectId" /></div>
             <div className="sm:col-span-2"><Label>Caption</Label><Input value={form.caption} onChange={(e) => setForm({ ...form, caption: e.target.value })} placeholder="Styling my oversized tee…" /></div>
@@ -108,8 +132,17 @@ export default function UgcClient() {
           <Card key={item._id} className="overflow-hidden">
             <div className="relative h-48 bg-muted">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={item.thumbnailUrl || item.mediaUrl} alt={item.caption || 'UGC'} className="w-full h-full object-cover" loading="lazy" />
-              <Badge className="absolute top-2 left-2 text-[10px]" variant={item.source === 'instagram' ? 'default' : 'secondary'}>{item.source}</Badge>
+              <img
+                src={item.thumbnailUrl || (item.provider === 'instagram'
+                  ? 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=600&q=80'
+                  : item.mediaUrl)}
+                alt={item.caption || 'UGC'}
+                className="w-full h-full object-cover"
+                loading="lazy"
+              />
+              <Badge className="absolute top-2 left-2 text-[10px]" variant={item.source === 'instagram' ? 'default' : 'secondary'}>
+                {item.provider === 'instagram' ? `instagram ${item.shortcode || ''}` : item.source}
+              </Badge>
               {item.featured && <Badge className="absolute top-2 right-2 text-[10px] bg-amber-500 text-slate-950">Featured</Badge>}
             </div>
             <CardContent className="p-3 space-y-1.5 text-xs">

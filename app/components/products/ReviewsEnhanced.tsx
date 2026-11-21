@@ -304,7 +304,7 @@ export const ReviewsEnhanced: React.FC<ReviewsEnhancedProps> = ({ productId }) =
       </div>
 
       {/* Review Form */}
-      {isAuthenticated && (
+      {isCustomer && (
         <Card className="mb-8">
           <CardHeader>
             <CardTitle>Write a Review</CardTitle>
@@ -556,8 +556,7 @@ export const ReviewsEnhanced: React.FC<ReviewsEnhancedProps> = ({ productId }) =
       <LoginModal
         open={showLoginModal}
         onOpenChange={setShowLoginModal}
-        title="Login to Write a Review"
-        description="You need to be logged in to submit a product review."
+        action="review"
       />
     </div>
   );

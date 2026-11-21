@@ -149,7 +149,18 @@ export interface IProduct {
   
   // Media
   images: (string | { url: string; altText?: string; title?: string; position?: number })[];
-  videos?: Array<{ url: string; thumbnailUrl?: string; title?: string; enabled?: boolean }>;
+  videos?: Array<{
+    url: string;
+    thumbnailUrl?: string;
+    title?: string;
+    enabled?: boolean;
+    provider?: 'upload' | 'instagram' | 'youtube' | 'vimeo';
+    sourceUrl?: string;
+    shortcode?: string;
+    embedUrl?: string;
+    mediaType?: 'file' | 'reel' | 'post' | 'tv';
+    aspectRatio?: '9:16' | '16:9' | '1:1';
+  }>;
   
   // Advanced Variants
   hasVariants?: boolean;

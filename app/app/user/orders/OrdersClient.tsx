@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { getUserOrders, Order, OrderStatus } from '@/lib/api/orders';
+import { getUserOrders, repeatOrder, Order, OrderStatus } from '@/lib/api/orders';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -11,7 +11,7 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { formatPrice } from '@/lib/utils';
-import { Package, Eye, Loader2 } from 'lucide-react';
+import { Package, Eye, Loader2, RotateCcw } from 'lucide-react';
 import Image from 'next/image';
 
 const getStatusBadgeVariant = (status: OrderStatus): 'default' | 'secondary' | 'destructive' | 'outline' => {
@@ -45,6 +45,25 @@ export default function OrdersClient() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [selectedStatus, setSelectedStatus] = useState<OrderStatus | undefined>(undefined);
+  const [repeatingId, setRepeatingId] = useState<string | null>(null);
+
+  const handleRepeat = async (orderId: string) => {
+    setRepeatingId(orderId);
+    try {
+      const response = await repeatOrder(orderId);
+      toast({ title: 'Reorder created', description: 'A new order has been created from this order.' });
+      if (response.data?._id) router.push(`/user/orders/${response.data._id}`);
+      else loadOrders();
+    } catch (error: any) {
+      toast({
+        title: 'Could not reorder',
+        description: error?.response?.data?.error || 'Some items may be unavailable. Try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setRepeatingId(null);
+    }
+  };
 
   useEffect(() => {
     loadOrders();
@@ -203,12 +222,26 @@ export default function OrdersClient() {
                       <div className="text-sm text-muted-foreground">Total</div>
                       <div className="text-lg font-semibold">{formatPrice(order.total)}</div>
                     </div>
-                    <Button asChild variant="outline">
-                      <Link href={`/user/orders/${order._id}`}>
-                        <Eye className="h-4 w-4 mr-2" />
-                        View Details
-                      </Link>
-                    </Button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        variant="outline"
+                        onClick={() => handleRepeat(order._id)}
+                        disabled={repeatingId === order._id}
+                      >
+                        {repeatingId === order._id ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <RotateCcw className="h-4 w-4 mr-2" />
+                        )}
+                        Reorder
+                      </Button>
+                      <Button asChild variant="outline">
+                        <Link href={`/user/orders/${order._id}`}>
+                          <Eye className="h-4 w-4 mr-2" />
+                          View Details
+                        </Link>
+                      </Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>

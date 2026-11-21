@@ -5,13 +5,20 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Loader2, Upload, Trash2, Video, Link2 } from 'lucide-react';
+import { Loader2, Upload, Trash2, Video, Link2, Instagram, ExternalLink, CheckCircle2, AlertCircle } from 'lucide-react';
+import { looksLikeInstagram, parseInstagramUrl } from '@/lib/media/instagram';
 
 export interface ProductVideoInfo {
   url: string;
   thumbnailUrl?: string;
   title?: string;
   enabled?: boolean;
+  provider?: 'upload' | 'instagram' | 'youtube' | 'vimeo';
+  sourceUrl?: string;
+  shortcode?: string;
+  embedUrl?: string;
+  mediaType?: 'file' | 'reel' | 'post' | 'tv';
+  aspectRatio?: '9:16' | '16:9' | '1:1';
 }
 
 interface ProductVideoManagerProps {
@@ -37,6 +44,8 @@ export default function ProductVideoManager({ videos, onChange }: ProductVideoMa
   const [error, setError] = useState<string | null>(null);
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [urlDraft, setUrlDraft] = useState('');
+  const draftInstagram = parseInstagramUrl(urlDraft);
+  const isInstagram = video?.provider === 'instagram' || Boolean(video?.embedUrl);
 
   const update = (patch: Partial<ProductVideoInfo>) => {
     const next: ProductVideoInfo = {
@@ -95,7 +104,37 @@ export default function ProductVideoManager({ videos, onChange }: ProductVideoMa
   const applyUrl = () => {
     const url = urlDraft.trim();
     if (!url) return;
-    onChange([{ ...(video || {}), url, enabled: video?.enabled !== false }]);
+    const instagram = parseInstagramUrl(url);
+    if (looksLikeInstagram(url) && !instagram) {
+      setError('That looks like an Instagram link, but it is not a Reel, Post or TV URL.');
+      return;
+    }
+    setError(null);
+    if (instagram) {
+      onChange([{
+        ...(video || { url: instagram.sourceUrl }),
+        url: instagram.sourceUrl,
+        provider: 'instagram',
+        sourceUrl: instagram.sourceUrl,
+        shortcode: instagram.shortcode,
+        embedUrl: instagram.embedUrl,
+        mediaType: instagram.mediaType,
+        aspectRatio: instagram.aspectRatio,
+        enabled: video?.enabled !== false,
+      }]);
+    } else {
+      onChange([{
+        ...(video || {}),
+        url,
+        provider: 'upload',
+        mediaType: 'file',
+        aspectRatio: '16:9',
+        sourceUrl: undefined,
+        shortcode: undefined,
+        embedUrl: undefined,
+        enabled: video?.enabled !== false,
+      }]);
+    }
     setUrlDraft('');
     setShowUrlInput(false);
   };
@@ -109,7 +148,7 @@ export default function ProductVideoManager({ videos, onChange }: ProductVideoMa
   return (
     <div className="space-y-4">
       <p className="text-xs text-muted-foreground">
-        Shown on the product details page as a draggable, auto-playing, looping player.
+        MP4/WebM plays in the draggable floating player. Instagram Reels open in a click-to-load 9:16 modal.
       </p>
 
       {error && (
@@ -172,7 +211,7 @@ export default function ProductVideoManager({ videos, onChange }: ProductVideoMa
               <Input
                 value={urlDraft}
                 onChange={(e) => setUrlDraft(e.target.value)}
-                placeholder="https://cdn.example.com/product.mp4"
+                placeholder="MP4 URL or Instagram Reel link"
                 className="h-9 text-xs"
               />
               <Button type="button" size="sm" onClick={applyUrl} disabled={!urlDraft.trim()}>
@@ -180,32 +219,75 @@ export default function ProductVideoManager({ videos, onChange }: ProductVideoMa
               </Button>
             </div>
           )}
+          {urlDraft.trim() && (
+            <div className="mx-auto max-w-xl">
+              {draftInstagram ? (
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-left">
+                  <span className="flex items-center gap-2 text-[11px] font-bold text-emerald-800">
+                    <CheckCircle2 className="h-4 w-4" />
+                    Instagram {draftInstagram.mediaType} detected · {draftInstagram.shortcode}
+                  </span>
+                  <a href={draftInstagram.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-[10px] font-bold text-emerald-800 underline">
+                    Preview <ExternalLink className="inline h-3 w-3" />
+                  </a>
+                </div>
+              ) : looksLikeInstagram(urlDraft) ? (
+                <p className="flex items-center gap-1 text-[11px] font-semibold text-rose-700">
+                  <AlertCircle className="h-3.5 w-3.5" /> Not an Instagram Reel, Post or TV URL.
+                </p>
+              ) : (
+                <p className="text-[11px] text-muted-foreground">Will be treated as a hosted video file.</p>
+              )}
+            </div>
+          )}
         </div>
       ) : (
         <div className="rounded-xl border border-border bg-card p-3 space-y-3">
           <div className="flex flex-col sm:flex-row gap-3">
-            <div className="w-full sm:w-48 shrink-0 rounded-lg overflow-hidden bg-slate-950 aspect-video">
-              <video
-                src={resolveSrc(video.url)}
-                poster={video.thumbnailUrl ? resolveSrc(video.thumbnailUrl) : undefined}
-                controls
-                muted
-                loop
-                playsInline
-                className="w-full h-full object-contain"
-              />
+            <div className={`w-full sm:w-48 shrink-0 overflow-hidden rounded-lg bg-slate-950 ${isInstagram ? 'aspect-[9/16]' : 'aspect-video'}`}>
+              {isInstagram ? (
+                <div className="relative flex h-full w-full flex-col items-center justify-center gap-2 bg-gradient-to-br from-fuchsia-600/30 via-slate-950 to-amber-500/20 p-3 text-center">
+                  <Instagram className="h-7 w-7 text-white" />
+                  <p className="text-[10px] font-extrabold uppercase tracking-wide text-white">
+                    Reel detected
+                  </p>
+                  <p className="text-[9px] font-mono text-white/60">{video.shortcode}</p>
+                  <a
+                    href={video.sourceUrl || video.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-300 underline"
+                  >
+                    Open <ExternalLink className="h-3 w-3" />
+                  </a>
+                </div>
+              ) : (
+                <video
+                  src={resolveSrc(video.url)}
+                  poster={video.thumbnailUrl ? resolveSrc(video.thumbnailUrl) : undefined}
+                  controls
+                  muted
+                  loop
+                  playsInline
+                  className="w-full h-full object-contain"
+                />
+              )}
             </div>
 
             <div className="flex-1 space-y-2 min-w-0">
               <div className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-2">
                 <div>
-                  <Label className="text-xs font-semibold">Show floating player</Label>
+                  <Label className="text-xs font-semibold">
+                    {isInstagram ? 'Show Reel on product page' : 'Show floating player'}
+                  </Label>
                   <p className="text-[11px] text-muted-foreground">
-                    Draggable, muted autoplay on the product page.
+                    {isInstagram
+                      ? 'Click-to-load 9:16 embed. Nothing loads until the shopper taps Play.'
+                      : 'Draggable, muted autoplay on the product page.'}
                   </p>
                 </div>
                 <Switch
-                  aria-label="Show floating product video"
+                  aria-label={isInstagram ? 'Show Instagram Reel on product page' : 'Show floating product video'}
                   checked={video.enabled !== false}
                   onCheckedChange={(c) => update({ enabled: c })}
                 />

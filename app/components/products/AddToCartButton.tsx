@@ -2,13 +2,14 @@
 
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { ShoppingCart, Minus, Plus, ArrowRight, Check, Loader2 } from 'lucide-react';
+import { ShoppingCart, Minus, Plus, ArrowRight, Check, Loader2, Lock } from 'lucide-react';
 import { useCart } from '@/lib/contexts/CartContext';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { LoginModal } from '@/components/auth/LoginModal';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
+import { trackEvent } from '@/lib/analytics/events';
 
 interface AddToCartButtonProps {
   productId: string;
@@ -31,7 +32,7 @@ export const AddToCartButton: React.FC<AddToCartButtonProps> = ({
 }) => {
   const router = useRouter();
   const { items, addItem, updateItem, removeItem, requiresAuth } = useCart();
-  const { isAuthenticated, isCustomer } = useAuth();
+  const { isAuthenticated, isCustomer, isStaff } = useAuth();
   const { toast } = useToast();
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -59,7 +60,6 @@ export const AddToCartButton: React.FC<AddToCartButtonProps> = ({
     }
     if (requiresAuth()) {
       setShowLoginModal(true);
-      toast({ title: 'Login required', description: 'Please login or register to add items to cart.', variant: 'destructive' });
       return;
     }
 
@@ -109,6 +109,31 @@ export const AddToCartButton: React.FC<AddToCartButtonProps> = ({
     e.stopPropagation();
     router.push('/checkout');
   };
+
+  // Staff accounts are dashboard-only. Never render a buying control they
+  // cannot complete (the API would reject it with a confusing 403).
+  if (isStaff) {
+    return (
+      <Button
+        type="button"
+        variant="outline"
+        size={size}
+        className={cn('border-amber-300 bg-amber-50 text-[11px] font-bold text-amber-900 hover:bg-amber-100', className)}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          trackEvent('staff_commerce_blocked', { surface: 'add_to_cart', productId });
+          toast({
+            title: 'Customer account required',
+            description: 'Staff accounts cannot shop. Use the dashboard or sign in as a customer.',
+          });
+        }}
+      >
+        <Lock className="mr-2 h-4 w-4" />
+        Customer account required
+      </Button>
+    );
+  }
 
   // If item is in cart, show quantity controls + Checkout button!
   if (cartItem) {
@@ -170,8 +195,8 @@ export const AddToCartButton: React.FC<AddToCartButtonProps> = ({
       <LoginModal
         open={showLoginModal}
         onOpenChange={setShowLoginModal}
-        title="Login to Add to Cart"
-        description="You need to be logged in to add items to your cart and proceed with checkout."
+        action="cart"
+        pendingAction={{ type: 'add_to_cart', productId, quantity, variations }}
       />
     </>
   );

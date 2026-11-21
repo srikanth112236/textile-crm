@@ -104,7 +104,7 @@ test.describe('Storefront UX pass', () => {
     expect(errors, `Page errors:\n${errors.join('\n')}`).toEqual([]);
   });
 
-  test('product filters: icons on every section, one accordion open at a time', async ({ page }, testInfo) => {
+  test('product filters: icons on every section, groups open independently', async ({ page }, testInfo) => {
     const errors = collectPageErrors(page);
     await page.goto('/products', { waitUntil: 'domcontentloaded' });
 
@@ -123,30 +123,33 @@ test.describe('Storefront UX pass', () => {
     // No emoji fallback left behind in the price header.
     await expect(sidebar.getByText('💰')).toHaveCount(0);
 
-    // Only Categories is open on first paint.
+    // Categories + Price are open on first paint for high-intent shoppers.
     const expanded = () =>
       sidebar.locator('button[aria-expanded="true"]').count();
-    expect(await expanded()).toBe(1);
+    expect(await expanded()).toBe(2);
     await expect(sidebar.getByRole('button', { name: /^Categories/i })).toHaveAttribute('aria-expanded', 'true');
+    await expect(sidebar.getByRole('button', { name: /^Price Range/i })).toHaveAttribute('aria-expanded', 'true');
 
-    // Opening Size closes Categories (single-open accordion).
+    // Opening Size adds to the open set instead of closing Categories.
     await sidebar.getByRole('button', { name: /^Size/i }).click();
     await expect(sidebar.getByRole('button', { name: /^Size/i })).toHaveAttribute('aria-expanded', 'true');
-    await expect(sidebar.getByRole('button', { name: /^Categories/i })).toHaveAttribute('aria-expanded', 'false');
-    expect(await expanded()).toBe(1);
+    await expect(sidebar.getByRole('button', { name: /^Categories/i })).toHaveAttribute('aria-expanded', 'true');
+    expect(await expanded()).toBe(3);
 
-    // Opening Fabric (attribute group) closes Size.
+    // Opening Fabric keeps the other groups open.
     await sidebar.getByRole('button', { name: /^Fabric/i }).click();
     await expect(sidebar.getByRole('button', { name: /^Fabric/i })).toHaveAttribute('aria-expanded', 'true');
-    await expect(sidebar.getByRole('button', { name: /^Size/i })).toHaveAttribute('aria-expanded', 'false');
-    expect(await expanded()).toBe(1);
+    await expect(sidebar.getByRole('button', { name: /^Size/i })).toHaveAttribute('aria-expanded', 'true');
+    expect(await expanded()).toBe(4);
 
-    // Accordion is collapsible: clicking the open one closes everything.
+    // Every group is still individually collapsible.
     await sidebar.getByRole('button', { name: /^Fabric/i }).click();
-    await expect.poll(expanded, { timeout: 5000 }).toBe(0);
+    await expect(sidebar.getByRole('button', { name: /^Fabric/i })).toHaveAttribute('aria-expanded', 'false');
+    expect(await expanded()).toBe(3);
 
     // Picking a filter still updates the URL + result count, without closing the rail.
-    await sidebar.getByRole('button', { name: /^Price Range/i }).click();
+    // Price Range stays open from first paint, so its presets are already visible.
+    await expect(sidebar.getByRole('button', { name: /^Price Range/i })).toHaveAttribute('aria-expanded', 'true');
     await sidebar.getByRole('button', { name: 'Under ₹500' }).click();
     await expect(page).toHaveURL(/[?&]maxPrice=500/);
     await expect(sidebar.getByRole('button', { name: /^Price Range/i })).toHaveAttribute('aria-expanded', 'true');
@@ -164,8 +167,15 @@ test.describe('Storefront UX pass', () => {
     await expect(triggers).toHaveCount(4); // Categories / Price / Size / Color
     expect(await sidebar.locator('button[aria-expanded] > span > svg').count()).toBe(4);
 
-    await sidebar.getByRole('button', { name: /^Price Range/i }).click();
-    await expect(sidebar.getByRole('button', { name: /^Price Range/i })).toHaveAttribute('aria-expanded', 'true');
+    const priceTrigger = sidebar.getByRole('button', { name: /^Price Range/i });
+    // Retry once hydration has settled; a click during the dev compile window
+    // can land on the server-rendered copy and be replaced.
+    await expect(async () => {
+      if ((await priceTrigger.getAttribute('aria-expanded')) !== 'true') {
+        await priceTrigger.click();
+      }
+      await expect(priceTrigger).toHaveAttribute('aria-expanded', 'true', { timeout: 1000 });
+    }).toPass({ timeout: 15_000 });
     await expect(sidebar.getByRole('button', { name: /^All Categories/i })).toHaveAttribute('aria-expanded', 'false');
     expect(await sidebar.locator('button[aria-expanded="true"]').count()).toBe(1);
 
@@ -181,7 +191,7 @@ test.describe('Storefront UX pass', () => {
 
     // The rest of the storefront is untouched.
     await expect(page.getByText('SHOP BY CATEGORY').first()).toBeVisible();
-    await expect(page.getByText('SHOP BY FIT').first()).toBeVisible();
+    await expect(page.getByText('NEW ARRIVALS').first()).toBeVisible();
 
     await shot(page, testInfo, 'ux-home-no-coupons');
   });
