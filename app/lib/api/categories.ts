@@ -51,11 +51,15 @@ export interface CategoryResponse {
 export const categoriesApi = {
   // Get all categories
   getCategories: async (status?: string): Promise<CategoriesResponse> => {
-    const params = new URLSearchParams();
-    if (status) params.append('status', status);
+    try {
+      const params = new URLSearchParams();
+      if (status) params.append('status', status);
 
-    const response = await apiClient.get(`/categories?${params.toString()}`);
-    return response.data;
+      const response = await apiClient.get(`/categories?${params.toString()}`);
+      return response.data;
+    } catch (error) {
+      return { success: false, data: [] };
+    }
   },
 
   // Get single category

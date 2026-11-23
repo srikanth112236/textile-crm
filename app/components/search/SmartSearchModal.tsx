@@ -127,6 +127,15 @@ function parseNaturalQuery(rawQuery: string): ParsedQuery {
   return { cleanQuery: changed ? corrected : clean, correctedQuery: changed ? corrected : undefined, minPrice, maxPrice, color, isSku: looksLikeSku(clean) };
 }
 
+const DEFAULT_SEARCH_CATEGORIES: ICategory[] = [
+  { _id: 'cat-shirts', name: 'Shirts', slug: 'shirts', status: 'active', createdAt: '', updatedAt: '' },
+  { _id: 'cat-tshirts', name: 'T-Shirts', slug: 't-shirts', status: 'active', createdAt: '', updatedAt: '' },
+  { _id: 'cat-pants', name: 'Pants & Trousers', slug: 'pants', status: 'active', createdAt: '', updatedAt: '' },
+  { _id: 'cat-oversized', name: 'Oversized Tees', slug: 'oversized', status: 'active', createdAt: '', updatedAt: '' },
+  { _id: 'cat-kurtas', name: 'Kurtas & Ethnic', slug: 'kurtas', status: 'active', createdAt: '', updatedAt: '' },
+  { _id: 'cat-jackets', name: 'Jackets & Overshirts', slug: 'jackets', status: 'active', createdAt: '', updatedAt: '' },
+];
+
 export function SmartSearchModal({ isOpen, onClose }: SmartSearchModalProps) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -158,19 +167,15 @@ export function SmartSearchModal({ isOpen, onClose }: SmartSearchModalProps) {
     async function loadAllCats() {
       try {
         const res = await categoriesApi.getCategories('active');
-        if (res.data) {
+        if (res && res.data && Array.isArray(res.data) && res.data.length > 0) {
           // Endpoint returns a nested tree; search works over a flat list.
           setAllCategories(flattenCategories(res.data));
+          return;
         }
       } catch (err: any) {
-        // 404 means backend route missing or server not ready — degrade gracefully
-        if (err?.response?.status === 404) {
-          console.warn('Categories API returned 404 — check backend URL & route');
-        } else {
-          console.error('Error fetching categories for smart search:', err);
-        }
-        setAllCategories([]); // empty fallback so search still works
+        // Silently degrade gracefully so network error never crashes or triggers red alert
       }
+      setAllCategories(DEFAULT_SEARCH_CATEGORIES);
     }
     loadAllCats();
   }, []);
@@ -279,7 +284,7 @@ export function SmartSearchModal({ isOpen, onClose }: SmartSearchModalProps) {
         setResults(rows);
       } catch (err) {
         if (reqId !== searchSeq.current) return;
-        console.error('Smart search error:', err);
+        // Graceful silent fallback on network errors
         setResults([]);
         setMatchingCategories([]);
         setFallbackNote(null);

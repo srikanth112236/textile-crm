@@ -32,12 +32,14 @@ export default withAuth(
       '/terms',
       '/cookies',
     ]);
-    const prefixPublicRoutes = ['/products', '/search', '/categories', '/templates'];
+    const prefixPublicRoutes = ['/products', '/search', '/categories', '/templates', '/demo', '/demo-'];
 
     const isExpressCheckout = path === '/checkout/express' || path.startsWith('/checkout/express/');
     const isPublicRoute =
       !isExpressCheckout &&
-      (exactPublicRoutes.has(path) || prefixPublicRoutes.some((route) => path.startsWith(`${route}/`)));
+      (exactPublicRoutes.has(path) ||
+        path.startsWith('/demo-') ||
+        prefixPublicRoutes.some((route) => path.startsWith(`${route}/`)));
 
     // Allow access to public routes without a token.
     // Auth pages stay reachable for signed-in users too; the page itself
