@@ -50,7 +50,7 @@ export default function AboutPage() {
           <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-sand/70 px-4 py-1.5 text-[10px] font-extrabold uppercase tracking-[0.18em] text-[#64aa34]">
             <Sparkles className="h-3 w-3" /> The Mentoos Story
           </span>
-          <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight text-ink leading-[1.05]">
+          <h1 className="text-[26px] sm:text-[38px] font-extrabold tracking-tight text-ink leading-[1.06]">
             Redefining Everyday Menswear for Modern India.
           </h1>
           <p className="text-sm sm:text-base leading-relaxed text-ink-muted">
@@ -61,19 +61,19 @@ export default function AboutPage() {
         {/* Stats Row */}
         <div className="mt-10 grid grid-cols-2 sm:grid-cols-4 gap-4 pt-8 border-t border-line">
           <div>
-            <p className="text-3xl sm:text-4xl font-extrabold text-ink">230k+</p>
+            <p className="text-[24px] sm:text-[30px] font-extrabold text-ink">230k+</p>
             <p className="text-xs text-ink-muted mt-0.5">Men Styled Nationwide</p>
           </div>
           <div>
-            <p className="text-3xl sm:text-4xl font-extrabold text-ink">9 / 10</p>
+            <p className="text-[24px] sm:text-[30px] font-extrabold text-ink">9 / 10</p>
             <p className="text-xs text-ink-muted mt-0.5">Clients Recommend Us</p>
           </div>
           <div>
-            <p className="text-3xl sm:text-4xl font-extrabold text-ink">4.9 ★</p>
+            <p className="text-[24px] sm:text-[30px] font-extrabold text-ink">4.9 ★</p>
             <p className="text-xs text-ink-muted mt-0.5">Verified Customer Rating</p>
           </div>
           <div>
-            <p className="text-3xl sm:text-4xl font-extrabold text-ink">100%</p>
+            <p className="text-[24px] sm:text-[30px] font-extrabold text-ink">100%</p>
             <p className="text-xs text-ink-muted mt-0.5">Pre-Shrunk Natural Yarns</p>
           </div>
         </div>
@@ -88,7 +88,7 @@ export default function AboutPage() {
           <span className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-amber-800">
             Uncompromising Standards
           </span>
-          <h2 className="text-3xl sm:text-4xl font-extrabold text-ink tracking-tight">
+          <h2 className="text-[20px] sm:text-[26px] font-extrabold text-ink tracking-tight">
             Our Four Craftsmanship Pillars
           </h2>
           <p className="text-xs sm:text-sm text-ink-muted">
@@ -119,7 +119,7 @@ export default function AboutPage() {
           <span className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-amber-800">
             Behind The Seams
           </span>
-          <h2 className="text-3xl sm:text-4xl font-extrabold text-ink tracking-tight">
+          <h2 className="text-[20px] sm:text-[26px] font-extrabold text-ink tracking-tight">
             How We Build Every Piece
           </h2>
           <p className="text-xs sm:text-sm text-ink-muted">
@@ -140,7 +140,7 @@ export default function AboutPage() {
 
       {/* 6. Call to Action */}
       <section className="rounded-[30px] bg-ink p-8 sm:p-12 text-white text-center space-y-5 shadow-xl">
-        <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight">
+        <h2 className="text-[20px] sm:text-[26px] font-extrabold tracking-tight">
           Ready to Upgrade Your Daily Wardrobe?
         </h2>
         <p className="text-xs sm:text-sm text-white/70 max-w-md mx-auto">

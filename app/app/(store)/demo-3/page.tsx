@@ -1,6 +1,6 @@
 import React from 'react';
 import type { Metadata } from 'next';
-import { Demo3Page } from '@/components/home/demo-3/Demo3Page';
+import Demo3Page from '@/components/home/demo-3/Demo3Page';
 
 export const metadata: Metadata = {
   title: 'Mentoos · Neo-Minimalist Studio · Drop 03 Lookbook',

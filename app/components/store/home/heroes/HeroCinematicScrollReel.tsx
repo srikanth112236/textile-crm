@@ -96,7 +96,7 @@ export function HeroCinematicScrollReel() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -15 }}
                 transition={{ duration: 0.35 }}
-                className="text-3xl sm:text-5xl font-extrabold tracking-tight text-white leading-[1.08]"
+                className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white leading-[1.08]"
               >
                 {current.title}
               </motion.h2>

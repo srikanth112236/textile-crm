@@ -55,7 +55,7 @@ export function HeroEditorialLookbookParallax() {
             <p className="text-xs font-mono font-bold tracking-widest text-ink-muted uppercase">
               MENTOOS // EDITORIAL LOOKBOOK
             </p>
-            <h2 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-ink uppercase leading-none">
+            <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-ink uppercase leading-none">
               BUILT FOR
             </h2>
 
@@ -68,7 +68,7 @@ export function HeroEditorialLookbookParallax() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -16 }}
                   transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-                  className="font-serif italic text-3xl sm:text-5xl font-bold text-amber-800 leading-none"
+                  className="font-serif italic text-2xl sm:text-3xl font-bold text-amber-800 leading-none"
                 >
                   {currentWord}.
                 </motion.span>

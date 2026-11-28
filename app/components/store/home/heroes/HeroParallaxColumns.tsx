@@ -34,7 +34,7 @@ export function HeroParallaxColumns() {
             <span>Aceternity 02 · Staggered Parallax Grid</span>
           </div>
 
-          <h2 className="text-4xl sm:text-6xl font-extrabold tracking-tight text-ink leading-[1.05]">
+          <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-ink leading-[1.05]">
             SHARP PROFILES.<br />
             <span className="italic font-serif text-amber-700">UNRESTRICTED</span> DRAPE.
           </h2>

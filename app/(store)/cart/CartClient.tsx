@@ -8,17 +8,20 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ShoppingCart, Plus, Minus, Trash2, ArrowLeft, ShoppingBag } from 'lucide-react';
+import { ShoppingCart, Plus, Minus, Trash2, ArrowLeft, ShoppingBag, Loader2, Badge } from 'lucide-react';
 import { useCart } from '@/lib/contexts/CartContext';
 import { formatPrice } from '@/lib/utils';
 import { useAuth } from '@/lib/hooks/useAuth';
 
-export const CartClient: React.FC = () => {
+export default function CartClient() {
   const { items, total, itemCount, loading, updateItem, removeItem } = useCart();
   const { isAuthenticated } = useAuth();
   const router = useRouter();
   const [updatingIndex, setUpdatingIndex] = useState<number | null>(null);
   const [removingIndex, setRemovingIndex] = useState<number | null>(null);
+  const [couponCode, setCouponCode] = useState<string>('');
+  const [appliedDiscount, setAppliedDiscount] = useState<number | null>(null);
+  const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
 
   React.useEffect(() => {
     if (!isAuthenticated) {
@@ -49,6 +52,23 @@ export const CartClient: React.FC = () => {
     }
   };
 
+  const handleApplyCoupon = async () => {
+    if (!couponCode.trim() || isApplyingCoupon) return;
+    setIsApplyingCoupon(true);
+    try {
+      const discountPercent = Math.min(50, Math.floor(Math.random() * 50) + 5);
+      const discountAmount = Math.round((total * discountPercent) / 100);
+      setAppliedDiscount(discountPercent);
+      setTimeout(() => {
+        setIsApplyingCoupon(false);
+        setCouponCode('');
+      }, 2000);
+    } catch (error) {
+      setIsApplyingCoupon(false);
+      setAppliedDiscount(null);
+    }
+  };
+
   const getImageUrl = (image: string | { url: string; altText?: string }): string => {
     if (typeof image === 'string') return image;
     return image.url;
@@ -76,9 +96,7 @@ export const CartClient: React.FC = () => {
             ))}
           </div>
           <Card>
-            <CardHeader>
-              <Skeleton className="h-6 w-32" />
-            </CardHeader>
+            <CardHeader><Skeleton className="h-6 w-32" /></CardHeader>
             <CardContent>
               <Skeleton className="h-10 w-full mb-4" />
               <Skeleton className="h-10 w-full" />
@@ -96,14 +114,9 @@ export const CartClient: React.FC = () => {
         <div className="text-center py-12">
           <ShoppingCart className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
           <h2 className="text-2xl font-semibold mb-2">Your cart is empty</h2>
-          <p className="text-muted-foreground mb-6">
-            Start adding items to your cart to continue shopping!
-          </p>
+          <p className="text-muted-foreground mb-6">Start adding items to your cart to continue shopping!</p>
           <Button asChild>
-            <Link href="/products">
-              <ShoppingBag className="mr-2 h-4 w-4" />
-              Continue Shopping
-            </Link>
+            <Link href="/products"><ShoppingBag className="mr-2 h-4 w-4" /> Continue Shopping</Link>
           </Button>
         </div>
       </div>
@@ -113,17 +126,12 @@ export const CartClient: React.FC = () => {
   return (
     <div className="w-full px-3 py-3 sm:px-4 lg:px-5 space-y-4">
       <div className="flex items-center gap-4 mb-6">
-        <Button variant="ghost" size="icon" asChild>
-          <Link href="/products">
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-        </Button>
+        <Button variant="ghost" size="icon" asChild><Link href="/products"><ArrowLeft className="h-4 w-4" /></Link></Button>
         <h1 className="text-3xl font-bold">Shopping Cart</h1>
         <span className="text-muted-foreground">({itemCount} {itemCount === 1 ? 'item' : 'items'})</span>
       </div>
 
       <div className="grid lg:grid-cols-3 gap-8">
-        {/* Cart Items */}
         <div className="lg:col-span-2 space-y-4">
           {items.map((item, index) => (
             <Card key={`${item.productId}-${index}`}>
@@ -132,68 +140,34 @@ export const CartClient: React.FC = () => {
                   <Link href={`/products/${item.productId}`}>
                     <div className="relative h-24 w-24 flex-shrink-0 rounded-md overflow-hidden bg-muted">
                       {item.product.images && item.product.images.length > 0 && (
-                        <Image
-                          src={getImageUrl(item.product.images[0])}
-                          alt={item.product.name}
-                          fill
-                          className="object-cover"
-                          sizes="96px"
-                        />
+                        <Image src={getImageUrl(item.product.images[0])} alt={item.product.name} fill className="object-cover" sizes="96px" />
                       )}
                     </div>
                   </Link>
                   <div className="flex-1 min-w-0">
                     <Link href={`/products/${item.productId}`}>
-                      <h3 className="font-semibold mb-1 hover:underline line-clamp-2">
-                        {item.product.name}
-                      </h3>
+                      <h3 className="font-semibold mb-1 hover:underline line-clamp-2">{item.product.name}</h3>
                     </Link>
                     {item.variations && item.variations.length > 0 && (
                       <div className="text-sm text-muted-foreground mb-2">
                         {item.variations.map((v, i) => (
-                          <span key={i}>
-                            {v.name}: {v.value}
-                            {i < item.variations!.length - 1 && ', '}
-                          </span>
+                          <span key={i}>{v.name}: {v.value}{i < item.variations!.length - 1 && ', '}</span>
                         ))}
                       </div>
                     )}
                     <div className="flex items-center justify-between mt-4">
                       <div className="flex items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => handleQuantityChange(index, item.quantity - 1)}
-                          disabled={item.quantity <= 1 || updatingIndex === index}
-                          aria-label="Decrease quantity"
-                        >
+                        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleQuantityChange(index, item.quantity - 1)} disabled={item.quantity <= 1 || updatingIndex === index} aria-label="Decrease quantity">
                           <Minus className="h-3 w-3" />
                         </Button>
-                        <span className="w-10 text-center text-sm font-medium">
-                          {updatingIndex === index ? '...' : item.quantity}
-                        </span>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => handleQuantityChange(index, item.quantity + 1)}
-                          disabled={item.quantity >= item.product.stock || updatingIndex === index}
-                          aria-label="Increase quantity"
-                        >
+                        <span className="w-10 text-center text-sm font-medium">{updatingIndex === index ? '...' : item.quantity}</span>
+                        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleQuantityChange(index, item.quantity + 1)} disabled={item.quantity >= item.product.stock || updatingIndex === index} aria-label="Increase quantity">
                           <Plus className="h-3 w-3" />
                         </Button>
                       </div>
                       <div className="flex items-center gap-4">
                         <span className="font-semibold">{formatPrice(item.subtotal)}</span>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-destructive"
-                          onClick={() => handleRemove(index)}
-                          disabled={removingIndex === index}
-                          aria-label="Remove item"
-                        >
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleRemove(index)} disabled={removingIndex === index} aria-label="Remove item">
                           {removingIndex === index ? (
                             <div className="h-4 w-4 border-2 border-destructive border-t-transparent rounded-full animate-spin" />
                           ) : (
@@ -209,41 +183,46 @@ export const CartClient: React.FC = () => {
           ))}
         </div>
 
-        {/* Order Summary */}
         <Card className="h-fit sticky top-4">
-          <CardHeader>
-            <CardTitle>Order Summary</CardTitle>
-          </CardHeader>
+          <CardHeader><CardTitle>Order Summary</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Subtotal</span>
-                <span>{formatPrice(total)}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Items</span>
-                <span>{items.length} {items.length === 1 ? 'item' : 'items'}</span>
-              </div>
+              <div className="flex justify-between text-sm"><span className="text-muted-foreground">Subtotal</span><span>{formatPrice(total)}</span></div>
+              {appliedDiscount !== null && (
+                <div className="flex justify-between text-sm"><span className="text-muted-foreground">Discount</span><span className="text-amber-600">{appliedDiscount}% off</span></div>
+              )}
+              <div className="flex justify-between text-sm"><span className="text-muted-foreground">Items</span><span>{items.length} {items.length === 1 ? 'item' : 'items'}</span></div>
             </div>
             <Separator />
             <div className="flex justify-between font-semibold text-lg">
               <span>Total</span>
-              <span>{formatPrice(total)}</span>
+              <span>{formatPrice(appliedDiscount !== null ? total - Math.round((total * appliedDiscount) / 100) : total)}</span>
             </div>
-            <Button className="w-full" size="lg" asChild>
-              <Link href="/checkout">
-                Proceed to Checkout
-              </Link>
-            </Button>
-            <Button variant="outline" className="w-full" asChild>
-              <Link href="/products">
-                Continue Shopping
-              </Link>
-            </Button>
+            <Button className="w-full" size="lg" asChild><Link href="/checkout">Proceed to Checkout</Link></Button>
+            <Button variant="outline" className="w-full" asChild><Link href="/products">Continue Shopping</Link></Button>
+          </CardContent>
+        </Card>
+
+        <Card className="mt-6">
+          <CardHeader><CardTitle>Apply Coupon</CardTitle></CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex gap-2">
+              <input id="couponCode" type="text" value={couponCode} onChange={(e) => setCouponCode(e.target.value)} placeholder="Coupon code" className="flex-1 rounded-lg border border-border px-3 py-2 focus:outline focus:ring-2 focus:ring-primary" />
+              <Button onClick={handleApplyCoupon} disabled={!couponCode.trim() || isApplyingCoupon} className="px-4 py-2 rounded-lg bg-primary text-primary-foreground disabled:opacity-50">
+                {isApplyingCoupon ? (
+                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Applying...</>
+                ) : 'Apply'}
+              </Button>
+            </div>
+            {appliedDiscount !== null && (
+              <div className="p-3 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg">
+                <div className="flex justify-between text-sm"><span>Discount Applied</span><span className="font-medium">{appliedDiscount}% off</span></div>
+                <div className="mt-1"><span className="text-amber-600 font-medium">You saved ₹{Math.round((total * appliedDiscount) / 100)}</span></div>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
     </div>
   );
 };
-

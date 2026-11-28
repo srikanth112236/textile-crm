@@ -104,7 +104,7 @@ export function HeroAuraGradientBlob() {
               <span className="text-[11px] font-mono font-bold tracking-widest uppercase text-amber-300">
                 {current.tag}
               </span>
-              <h2 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-white leading-[1.05]">
+              <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white leading-[1.05]">
                 {current.title}
               </h2>
               <p className="text-sm font-semibold text-slate-300">

@@ -155,7 +155,7 @@ export function Demo1NewArrivals({ products = [] }: Demo1NewArrivalsProps) {
             <div className="group" data-cursor="VIEW">
               <div className="relative aspect-[16/11] w-full overflow-hidden bg-sand/30">
                 <Image
-                  src="https://images.unsplash.com/photo-1542272604-780c96856592?auto=format&fit=crop&w=900&q=80"
+                  src="https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=900&q=80"
                   alt="Distressed Wash Denim Jacket"
                   fill
                   sizes="(max-width: 1024px) 100vw, 42vw"

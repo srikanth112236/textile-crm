@@ -100,6 +100,11 @@ export function Demo1Hero() {
     return () => ctx.revert();
   }, []);
 
+  // Reduced motion support
+  const reduceMotion =
+    typeof window !== 'undefined' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
   const handleQuickAdd = (product: { id: string; name: string; price: number }) => {
     try {
       addItem(product.id, 1, [{ name: 'Size', value: 'L' }]);
@@ -117,9 +122,7 @@ export function Demo1Hero() {
       ref={containerRef}
       className="relative min-h-[92vh] w-full overflow-hidden bg-paper pt-8 pb-16 border-b border-line/40 flex flex-col justify-between"
     >
-      {/* ========================================================
-          LAYER 1 (BACK): GIANT TYPOGRAPHY "DRAPE."
-         ======================================================== */}
+      {/* LAYER 1 (BACK): GIANT TYPOGRAPHY "DRAPE." */}
       <div
         ref={backTypeRef}
         aria-hidden="true"
@@ -142,10 +145,10 @@ export function Demo1Hero() {
               <AnimatePresence mode="wait">
                 <motion.span
                   key={FLIP_WORDS[wordIndex]}
-                  initial={{ y: 24, opacity: 0, rotateX: 45 }}
+                  initial={{ y: reduceMotion ? 0 : 24, opacity: reduceMotion ? 1 : 0, rotateX: reduceMotion ? 0 : 45 }}
                   animate={{ y: 0, opacity: 1, rotateX: 0 }}
-                  exit={{ y: -24, opacity: 0, rotateX: -45 }}
-                  transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+                  exit={{ y: reduceMotion ? 0 : -24, opacity: reduceMotion ? 1 : 0, rotateX: reduceMotion ? 0 : -45 }}
+                  transition={{ duration: reduceMotion ? 0 : 0.45, ease: reduceMotion ? 'linear' : [0.22, 1, 0.36, 1] }}
                   className="inline-block"
                 >
                   {FLIP_WORDS[wordIndex]}.
@@ -162,9 +165,7 @@ export function Demo1Hero() {
         </div>
       </div>
 
-      {/* ========================================================
-          LAYER 2 (MIDDLE): MODEL IMAGE PLATE
-         ======================================================== */}
+      {/* LAYER 2 (MIDDLE): MODEL IMAGE PLATE WITH PARALLAX */}
       <div className="relative z-10 mx-auto my-6 w-full max-w-5xl px-4 sm:px-6">
         <div
           ref={middleModelRef}
@@ -201,16 +202,19 @@ export function Demo1Hero() {
         </div>
       </div>
 
-      {/* ========================================================
-          LAYER 3 (FRONT): FLOATING PRODUCT CARDS
-         ======================================================== */}
+      {/* LAYER 3 (FRONT): FLOATING PRODUCT CARDS WITH FRAMER MOTION */}
       {/* Floating Card Left: 240 GSM Oversized Tee */}
       <div
         ref={frontCardLeftRef}
         className="hidden md:block absolute left-8 lg:left-16 bottom-16 z-20 w-64 rounded-xl border border-line bg-paper/95 p-3.5 shadow-2xl backdrop-blur-md"
         data-cursor="ADD"
       >
-        <div className="relative aspect-[4/3] w-full overflow-hidden rounded-lg bg-sand/40">
+        <motion.div
+          className="relative aspect-[4/3] w-full overflow-hidden rounded-lg bg-sand/40"
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.97 }}
+          transition={{ duration: 0.2, ease: 'easeOut' }}
+        >
           <Image
             src="https://images.unsplash.com/photo-1552374196-1ab2a1c593e8?auto=format&fit=crop&w=600&q=80"
             alt="240 GSM Heavyweight Tee"
@@ -220,7 +224,7 @@ export function Demo1Hero() {
           <span className="absolute left-2 top-2 rounded-full bg-ink/80 px-2 py-0.5 text-[9px] font-mono font-bold text-amber-300">
             240 GSM
           </span>
-        </div>
+        </motion.div>
         <div className="mt-2.5 flex items-start justify-between">
           <div>
             <h3 className="text-xs font-serif font-black text-ink">Boxy Heavyweight Tee</h3>
@@ -242,7 +246,12 @@ export function Demo1Hero() {
         className="hidden md:block absolute right-8 lg:right-16 bottom-24 z-20 w-64 rounded-xl border border-line bg-paper/95 p-3.5 shadow-2xl backdrop-blur-md"
         data-cursor="ADD"
       >
-        <div className="relative aspect-[4/3] w-full overflow-hidden rounded-lg bg-sand/40">
+        <motion.div
+          className="relative aspect-[4/3] w-full overflow-hidden rounded-lg bg-sand/40"
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.97 }}
+          transition={{ duration: 0.2, ease: 'easeOut' }}
+        >
           <Image
             src="https://images.unsplash.com/photo-1602810318383-e386cc2a3ccf?auto=format&fit=crop&w=600&q=80"
             alt="Relaxed Linen Shirt"
@@ -252,7 +261,7 @@ export function Demo1Hero() {
           <span className="absolute left-2 top-2 rounded-full bg-emerald-950/80 px-2 py-0.5 text-[9px] font-mono font-bold text-emerald-300">
             PURE FLAX
           </span>
-        </div>
+        </motion.div>
         <div className="mt-2.5 flex items-start justify-between">
           <div>
             <h3 className="text-xs font-serif font-black text-ink">Relaxed Cuban Linen</h3>

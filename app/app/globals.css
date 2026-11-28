@@ -211,3 +211,13 @@
   .shadow-soft { box-shadow: var(--shadow-soft); }
 }
 
+
+/* Infinite marquee used by the public store pages. */
+@keyframes store-marquee {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-50%, 0, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .store-marquee-track { animation: none !important; }
+}

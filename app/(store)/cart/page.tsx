@@ -1,5 +1,4 @@
-import React from 'react';
-import { CartClient } from './CartClient';
+import CartClient from './CartClient';
 import { Metadata } from 'next';
 
 export const metadata: Metadata = {
@@ -10,4 +9,3 @@ export const metadata: Metadata = {
 export default function CartPage() {
   return <CartClient />;
 }
-

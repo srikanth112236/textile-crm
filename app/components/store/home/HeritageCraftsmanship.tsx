@@ -15,7 +15,7 @@ export function HeritageCraftsmanship() {
           </span>
           <h2
             id="heritage-craft-title"
-            className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-ink mt-1.5"
+            className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-ink mt-1.5"
           >
             Heritage Meets<br />Modern Craftsmanship
           </h2>
@@ -35,12 +35,12 @@ export function HeritageCraftsmanship() {
         {/* Stats on the right (Ref: Image 1) */}
         <div className="flex items-center gap-8 border-l border-line pl-6">
           <div>
-            <p className="text-3xl sm:text-4xl font-extrabold text-ink tracking-tight">230k+</p>
+            <p className="text-2xl sm:text-3xl font-extrabold text-ink tracking-tight">230k+</p>
             <p className="text-xs text-ink-muted font-medium mt-0.5">Influenced People</p>
           </div>
           <div className="h-8 w-px bg-line" />
           <div>
-            <p className="text-3xl sm:text-4xl font-extrabold text-ink tracking-tight">9 / 10</p>
+            <p className="text-2xl sm:text-3xl font-extrabold text-ink tracking-tight">9 / 10</p>
             <p className="text-xs text-ink-muted font-medium mt-0.5">Clients Recommend</p>
           </div>
         </div>
@@ -81,7 +81,7 @@ export function HeritageCraftsmanship() {
 
           {/* Centered Large Bold FASHION Text Overlay (Ref: Image 1) */}
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <span className="text-5xl sm:text-6xl lg:text-7xl font-extrabold tracking-wider text-white/95 uppercase drop-shadow-xl">
+            <span className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-wider text-white/95 uppercase drop-shadow-xl">
               FASHION
             </span>
           </div>

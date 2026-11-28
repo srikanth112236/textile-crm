@@ -2,6 +2,7 @@ import { Metadata } from 'next';
 import { Suspense } from 'react';
 import { Header } from '@/components/navigation/Header';
 import { Footer } from '@/components/navigation/Footer';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
 
 // Main Flagship Hero: Hybrid Parallax Columns + Flip Words
 import { HeroParallaxFlipSplit } from '@/components/store/home/heroes/HeroParallaxFlipSplit';
@@ -77,7 +78,7 @@ const FALLBACK_NEW_ARRIVALS: IProduct[] = [
     description: 'Hand-abraded indigo wash with custom metallic hardware and relaxed chest drop.',
     price: 2199,
     compareAtPrice: 3299,
-    images: [{ url: 'https://images.unsplash.com/photo-1542272604-780c96856592?auto=format&fit=crop&w=700&q=80', isDefault: true }],
+    images: [{ url: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=700&q=80', isDefault: true }],
     category: { _id: 'cat-3', name: 'Jackets', slug: 'jackets' },
     status: 'active',
     sku: 'DNM-JKT-03',
@@ -296,7 +297,9 @@ async function HomeContent() {
 export default function HomePage() {
   return (
     <div className="flex min-h-screen flex-col bg-paper font-sans text-ink">
-      <Header />
+      <Header>
+        <ThemeToggle className="ml-4" />
+      </Header>
 
       <main id="main-content" className="w-full flex-1">
         {/* 1. MAIN HERO BANNER (Top Parallax + Flip Words Masterpiece) */}

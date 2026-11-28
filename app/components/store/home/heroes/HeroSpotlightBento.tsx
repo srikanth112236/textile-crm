@@ -36,7 +36,7 @@ export function HeroSpotlightBento() {
           <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3.5 py-1 text-[10px] font-extrabold uppercase tracking-[0.2em] text-[#c6f03d]">
             <Sparkles className="h-3 w-3 text-[#c6f03d]" /> 21st.dev 03 · Spotlight Cursor Bento
           </span>
-          <h2 className="text-3xl sm:text-5xl font-extrabold tracking-tight mt-2 text-white">
+          <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight mt-2 text-white">
             THE ARCHITECTURAL EDIT
           </h2>
         </div>

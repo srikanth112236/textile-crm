@@ -94,7 +94,7 @@ async function SearchResultsData({
   return (
     <>
       {searchParams.q && (
-        <p className="text-muted-foreground mb-6">
+        <p className="mb-5 text-[12px] text-ink-muted">
           {searchResults.pagination.total > 0
             ? `Found ${searchResults.pagination.total} result${searchResults.pagination.total === 1 ? '' : 's'} for "${searchParams.q}"`
             : `No results found for "${searchParams.q}"`}
@@ -114,14 +114,21 @@ export default async function SearchPage(props: SearchPageProps) {
   const searchParams = await props.searchParams;
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="mb-8">
-        <h1 className="text-4xl font-bold mb-2">Search Results</h1>
-      </div>
+    <div className="min-h-screen bg-paper">
+      <div className="container-page pb-16 pt-8">
+        <div className="border-b border-line pb-5">
+          <p className="text-[10px] font-bold uppercase tracking-[0.32em] text-ink-subtle">Search</p>
+          <h1 className="mt-2 text-[23px] font-extrabold tracking-tight text-ink sm:text-[28px]">
+            {searchParams.q ? <>Results for \u201c{searchParams.q}\u201d</> : 'Search the collection'}
+          </h1>
+        </div>
 
-      <Suspense fallback={<SearchResultsSkeleton />}>
-        <SearchResultsData searchParams={searchParams} />
-      </Suspense>
+        <div className="mt-6">
+          <Suspense fallback={<SearchResultsSkeleton />}>
+            <SearchResultsData searchParams={searchParams} />
+          </Suspense>
+        </div>
+      </div>
     </div>
   );
 }

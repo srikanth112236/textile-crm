@@ -55,7 +55,7 @@ export function HeroStickyScrollReveal() {
             <Sparkles className="h-3.5 w-3.5 text-amber-700" />
             <span>Aceternity 08 · Sticky Fabric Reveal</span>
           </span>
-          <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-ink mt-2">
+          <h2 className="text-xl sm:text-2xl font-extrabold tracking-tight text-ink mt-2">
             BEHIND THE CRAFTSMANSHIP
           </h2>
         </div>
@@ -102,7 +102,7 @@ export function HeroStickyScrollReveal() {
                 </span>
               </div>
 
-              <h3 className="text-3xl sm:text-4xl font-extrabold text-ink tracking-tight">
+              <h3 className="text-2xl sm:text-3xl font-extrabold text-ink tracking-tight">
                 {current.title}
               </h3>
 

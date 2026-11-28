@@ -91,7 +91,7 @@ export default function TrackOrderClient() {
         <Badge variant="outline" className="text-xs uppercase font-extrabold text-amber-600 border-amber-400 px-3 py-1">
           Express Logistics & Live Dispatch
         </Badge>
-        <h1 className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white tracking-tight">
+        <h1 className="text-[22px] sm:text-[27px] font-extrabold text-slate-900 dark:text-white tracking-tight">
           Track Your Mentoos Order 🚚
         </h1>
         <p className="text-xs sm:text-sm text-slate-500 max-w-md mx-auto">

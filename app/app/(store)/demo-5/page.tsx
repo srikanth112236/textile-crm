@@ -1,6 +1,6 @@
 import React from 'react';
 import type { Metadata } from 'next';
-import { Demo5Page } from '@/components/home/demo-5/Demo5Page';
+import Demo5Page from '@/components/home/demo-5/Demo5Page';
 
 export const metadata: Metadata = {
   title: 'Mentoos · Mediterranean Earth & Craft · Harvest 2026',

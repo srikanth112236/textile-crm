@@ -1,6 +1,6 @@
 import React from 'react';
 import type { Metadata } from 'next';
-import { Demo4Page } from '@/components/home/demo-4/Demo4Page';
+import Demo4Page from '@/components/home/demo-4/Demo4Page';
 
 export const metadata: Metadata = {
   title: 'Mentoos · Kinetic Runway · Live Runway 2026',

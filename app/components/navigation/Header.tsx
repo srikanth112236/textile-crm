@@ -146,7 +146,7 @@ const NAV_ITEMS = [
 
 const HEADER_CATEGORY_ORDER = ['t-shirts', 'shirts', 'trousers', 'joggers', 'activewear', 'ethnic-wear'];
 
-export function Header() {
+export function Header({ children }: { children?: import('react').ReactNode }) {
   const { user, logout, isAuthenticated, isStaff, role } = useAuth();
   const { itemCount } = useCart();
   const { itemCount: wishlistCount } = useWishlist();
@@ -413,6 +413,8 @@ export function Header() {
                   ⌘K
                 </span>
               </button>
+
+              {children}
 
               {/* Staff are dashboard-only: no customer commerce icons. */}
               {!isStaff && (

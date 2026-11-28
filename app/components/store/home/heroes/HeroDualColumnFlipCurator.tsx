@@ -63,7 +63,7 @@ export function HeroDualColumnFlipCurator() {
             <p className="text-xs font-mono font-bold tracking-widest text-ink-muted uppercase">
               CURATED SILHOUETTES // 2026
             </p>
-            <h2 className="text-3xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-ink uppercase leading-none">
+            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-ink uppercase leading-none">
               DISCOVER YOUR
             </h2>
 
@@ -76,7 +76,7 @@ export function HeroDualColumnFlipCurator() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -16 }}
                   transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-                  className="font-serif italic text-3xl sm:text-5xl lg:text-6xl font-bold text-amber-800 leading-none"
+                  className="font-serif italic text-2xl sm:text-3xl lg:text-4xl font-bold text-amber-800 leading-none"
                 >
                   {currentWord}.
                 </motion.span>

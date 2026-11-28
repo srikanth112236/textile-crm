@@ -160,7 +160,7 @@ export function MentoosHero() {
               </span>
             </div>
 
-            <h1 className="mt-6 text-3xl font-black leading-[1.02] tracking-tight text-white drop-shadow-2xl sm:text-5xl lg:text-6xl">
+            <h1 className="mt-6 text-2xl font-black leading-[1.02] tracking-tight text-white drop-shadow-2xl sm:text-3xl lg:text-4xl">
               {slide.title.split(' ')[0]}{' '}
               <span className="text-amber-400">
                 {slide.title.split(' ').slice(1).join(' ')}

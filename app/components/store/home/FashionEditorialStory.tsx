@@ -48,13 +48,13 @@ export function FashionEditorialStory() {
               <p className="text-xs sm:text-sm font-semibold tracking-widest text-ink-muted uppercase">
                 Wear Your
               </p>
-              <h2 className="font-serif italic text-4xl sm:text-6xl text-ink leading-none">
+              <h2 className="font-serif italic text-3xl sm:text-4xl text-ink leading-none">
                 Style,
               </h2>
               <p className="text-xs sm:text-sm font-semibold tracking-widest text-ink-muted uppercase mt-1">
                 Own Your
               </p>
-              <h2 className="text-4xl sm:text-6xl font-extrabold tracking-tight text-ink uppercase leading-none">
+              <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-ink uppercase leading-none">
                 Confidence
               </h2>
             </div>

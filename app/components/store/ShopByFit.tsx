@@ -131,7 +131,7 @@ export function ShopByFit() {
           </div>
 
           <div>
-            <h3 className="text-2xl sm:text-4xl font-black tracking-tight text-white">
+            <h3 className="text-xl sm:text-2xl font-black tracking-tight text-white">
               {selectedFit.title}
             </h3>
             <p className="mt-1 text-xs sm:text-sm font-semibold uppercase tracking-wider text-amber-400">

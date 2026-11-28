@@ -39,7 +39,7 @@ export function HeroBanner({
           <div className="inline-flex items-center justify-center p-3 rounded-full bg-primary/10 mb-4">
             <ShoppingBag className="h-8 w-8 text-primary" />
           </div>
-          <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-foreground">
+          <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-foreground">
             {title}
           </h1>
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto">

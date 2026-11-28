@@ -1,7 +1,7 @@
-/**
- * Theme Configuration
- * Additional theme-specific styles and utilities
- * Complements variables.css with theme-specific customizations
+/** 
+ * Theme Configuration 
+ * Additional theme-specific styles and utilities 
+ * Complements variables.css with theme-specific customizations 
  */
 
 /* Responsive Breakpoints (matching Tailwind config) */
@@ -146,20 +146,22 @@
   --focus-ring-offset: 0 0 0 2px hsl(var(--color-background)), 0 0 0 4px hsl(var(--color-ring));
 }
 
-/* Glassmorphism Effect (for future use) */
-.glass {
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+/* Blur-up Placeholder for Lazy-Loaded Images */
+.blur-up {
+  transition: transform var(--transition-base) var(--transition-fade), opacity var(--transition-base) var(--transition-fade);
 }
 
-.dark .glass {
-  background: rgba(0, 0, 0, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+.blur-up.loaded {
+  transform: scale(1);
+  opacity: 1;
 }
 
-/* Accessibility - Reduced Motion */
+.blur-up.loading {
+  transform: scale(1.05);
+  opacity: 0;
+}
+
+/* Reduced Motion Prefixes */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -170,3 +172,13 @@
   }
 }
 
+/* Theme-specific utilities */
+.light {
+  --background: var(--color-background);
+  --foreground: var(--color-foreground);
+}
+
+.dark {
+  --background: var(--color-background);
+  --foreground: var(--color-foreground);
+}

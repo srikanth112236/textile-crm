@@ -172,7 +172,7 @@ export default async function CategoryPage(props: CategoryPageProps) {
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-8">
-        <h1 className="text-4xl font-bold mb-2">{category.name}</h1>
+        <h1 className="mb-2 text-[24px] font-extrabold tracking-tight sm:text-[30px]">{category.name}</h1>
       </div>
 
       <Suspense fallback={<CategoryListingSkeleton />}>

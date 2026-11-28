@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -41,6 +42,19 @@ export const CartModal: React.FC<CartModalProps> = ({ children }) => {
     return image.url;
   };
 
+  // Cart open/close transition states
+  const cartTransition = {
+    hidden: { y: 100, opacity: 0 },
+    visible: { y: 0, opacity: 1 },
+    exit: { y: -100, opacity: 0 },
+  };
+
+  const itemTransition = {
+    type: 'tween' as const,
+    duration: 0.2,
+    ease: [0.22, 1, 0.36, 1] as [number, number, number, number],
+  };
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
@@ -59,7 +73,9 @@ export const CartModal: React.FC<CartModalProps> = ({ children }) => {
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+      <DialogContent
+        className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto"
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ShoppingCart className="h-5 w-5" />
@@ -79,10 +95,19 @@ export const CartModal: React.FC<CartModalProps> = ({ children }) => {
           </div>
         ) : (
           <>
-            <div className="space-y-4">
+            <AnimatePresence>
               {items.map((item, index) => (
-                <div key={`${item.productId}-${index}`} className="flex gap-4">
-                  <div className="relative h-20 w-20 flex-shrink-0 rounded-md overflow-hidden bg-muted">
+                <motion.div
+                  key={`${item.productId}-${index}`}
+                  initial="hidden"
+                  animate="visible"
+                  exit="exit"
+                  transition={{ duration: 0.2, delay: index * 0.05 }}
+                  className="flex gap-4"
+                >
+                  <motion.div
+                    className="relative h-20 w-20 flex-shrink-0 rounded-md overflow-hidden bg-muted"
+                  >
                     {item.product.images && item.product.images.length > 0 && (
                       <Image
                         src={getImageUrl(item.product.images[0])}
@@ -92,8 +117,11 @@ export const CartModal: React.FC<CartModalProps> = ({ children }) => {
                         sizes="80px"
                       />
                     )}
-                  </div>
-                  <div className="flex-1 min-w-0">
+                  </motion.div>
+                  <motion.div
+                    className="flex-1 min-w-0"
+                    transition={itemTransition}
+                  >
                     <Link
                       href={`/products/${item.productId}`}
                       onClick={() => setOpen(false)}
@@ -148,10 +176,10 @@ export const CartModal: React.FC<CartModalProps> = ({ children }) => {
                         </Button>
                       </div>
                     </div>
-                  </div>
-                </div>
+                  </motion.div>
+                </motion.div>
               ))}
-            </div>
+            </AnimatePresence>
 
             <Separator />
 
@@ -164,7 +192,11 @@ export const CartModal: React.FC<CartModalProps> = ({ children }) => {
                 <Button variant="outline" className="flex-1" onClick={() => setOpen(false)} asChild>
                   <Link href="/cart">View Cart</Link>
                 </Button>
-                <Button className="flex-1" onClick={() => setOpen(false)} asChild>
+                <Button
+                  className="flex-1"
+                  onClick={() => setOpen(false)}
+                  asChild
+                >
                   <Link href="/checkout">Checkout</Link>
                 </Button>
               </div>
@@ -175,5 +207,3 @@ export const CartModal: React.FC<CartModalProps> = ({ children }) => {
     </Dialog>
   );
 };
-
-

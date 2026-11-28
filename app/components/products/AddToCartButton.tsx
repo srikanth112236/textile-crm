@@ -1,5 +1,6 @@
 'use client';
 
+import { motion } from 'framer-motion';
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { ShoppingCart, Minus, Plus, ArrowRight, Check, Loader2, Lock } from 'lucide-react';
@@ -40,7 +41,11 @@ export const AddToCartButton: React.FC<AddToCartButtonProps> = ({
   // Staff (admin/superadmin) are dashboard-only and cannot shop.
   const staffBlocked = () => {
     if (isAuthenticated && !isCustomer) {
-      toast({ title: 'Customers only', description: 'Shopping actions are for customer accounts. Staff, please use the dashboard.', variant: 'destructive' });
+      toast({
+        title: 'Customers only',
+        description: 'Shopping actions are for customer accounts. Staff, please use the dashboard.',
+        variant: 'destructive',
+      });
       return true;
     }
     return false;
@@ -114,11 +119,9 @@ export const AddToCartButton: React.FC<AddToCartButtonProps> = ({
   // cannot complete (the API would reject it with a confusing 403).
   if (isStaff) {
     return (
-      <Button
+      <motion.button
         type="button"
-        variant="outline"
-        size={size}
-        className={cn('border-amber-300 bg-amber-50 text-[11px] font-bold text-amber-900 hover:bg-amber-100', className)}
+        className={cn('border-amber-300 bg-amber-50 text-[11px] font-bold text-amber-900 hover:bg-amber-100 transition-colors', className)}
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -128,63 +131,78 @@ export const AddToCartButton: React.FC<AddToCartButtonProps> = ({
             description: 'Staff accounts cannot shop. Use the dashboard or sign in as a customer.',
           });
         }}
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
+        transition={{ type: 'spring', stiffness: 150 }}
       >
         <Lock className="mr-2 h-4 w-4" />
         Customer account required
-      </Button>
+      </motion.button>
     );
   }
 
   // If item is in cart, show quantity controls + Checkout button!
   if (cartItem) {
     return (
-      <div className="flex items-center gap-1.5 w-full">
+      <motion.div
+        whileHover={{ scale: 1.02 }}
+        whileTap={{ scale: 0.97 }}
+        transition={{ type: 'spring', stiffness: 120 }}
+        className="flex items-center gap-1.5 w-full"
+      >
         {/* Counter controls */}
-        <div className="flex items-center border border-amber-500/50 dark:border-amber-400/50 rounded-xl overflow-hidden bg-amber-500/10 dark:bg-amber-500/20 backdrop-blur-sm shrink-0">
-          <button
+        <motion.div
+          className="flex items-center border border-amber-500/50 dark:border-amber-400/50 rounded-xl overflow-hidden bg-amber-500/10 dark:bg-amber-500/20 backdrop-blur-sm shrink-0"
+          whileHover={{ backgroundColor: 'rgba(251, 191, 36, 0.2)' }}
+        >
+          <motion.button
             onClick={handleDecrement}
             disabled={loading || disabled}
             className="p-2 text-slate-800 dark:text-slate-100 hover:bg-amber-500/20 transition-colors disabled:opacity-50"
             title="Decrease quantity"
           >
             <Minus className="w-3.5 h-3.5" />
-          </button>
+          </motion.button>
           <span className="px-2.5 text-xs font-black text-amber-700 dark:text-amber-300 min-w-[20px] text-center">
             {loading ? <Loader2 className="w-3 h-3 animate-spin mx-auto" /> : cartItem.quantity}
           </span>
-          <button
+          <motion.button
             onClick={handleIncrement}
             disabled={loading || disabled}
             className="p-2 text-slate-800 dark:text-slate-100 hover:bg-amber-500/20 transition-colors disabled:opacity-50"
             title="Increase quantity"
           >
             <Plus className="w-3.5 h-3.5" />
-          </button>
-        </div>
+          </motion.button>
+        </motion.div>
 
         {/* Go to Checkout Button */}
-        <Button
+        <motion.button
           onClick={handleCheckout}
           className={cn(
             'flex-1 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5 py-2',
             className
           )}
-          size={size}
         >
           <Check className="w-3.5 h-3.5 stroke-[3]" />
           <span>Checkout</span>
           <ArrowRight className="w-3.5 h-3.5" />
-        </Button>
-      </div>
+        </motion.button>
+      </motion.div>
     );
   }
 
   return (
-    <>
+    <motion.div
+      whileHover={{ scale: 1.02 }}
+      whileTap={{ scale: 0.97 }}
+      transition={{ type: 'spring', stiffness: 150 }}
+      className={cn('relative inline-flex items-center gap-2', className)}
+    >
       <Button
         onClick={handleAddToCart}
         disabled={disabled || loading}
-        className={className}
+        className={cn('flex-1 rounded-lg border transition-colors', className)}
         size={size}
         variant={variant}
         aria-label="Add to cart"
@@ -198,6 +216,6 @@ export const AddToCartButton: React.FC<AddToCartButtonProps> = ({
         action="cart"
         pendingAction={{ type: 'add_to_cart', productId, quantity, variations }}
       />
-    </>
+    </motion.div>
   );
 };

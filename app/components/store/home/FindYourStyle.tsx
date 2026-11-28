@@ -341,7 +341,7 @@ export function FindYourStyle() {
       {/* Header Block matching Reference Image */}
       <div className="relative z-10 flex flex-col justify-between gap-3 lg:flex-row lg:items-end">
         <div>
-          <h2 className="text-3xl font-extrabold tracking-[-0.035em] text-ink sm:text-4xl lg:text-5xl">
+          <h2 className="text-2xl font-extrabold tracking-[-0.035em] text-ink sm:text-3xl lg:text-4xl">
             Find Your Style
           </h2>
         </div>

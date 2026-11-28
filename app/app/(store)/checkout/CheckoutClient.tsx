@@ -457,6 +457,7 @@ export default function CheckoutClient() {
         </div>
       );
     }
+    // Empty bag: an effect below redirects to /cart, so there is nothing to paint.
     return null;
   }
 
@@ -464,27 +465,58 @@ export default function CheckoutClient() {
   const stepLabels = ['Address', 'Payment', 'Review', 'Confirmation'];
 
   return (
-    <div className="container mx-auto px-3 py-5 max-w-6xl">
-      <div className="mb-5">
-        <div className="flex items-center justify-center gap-1.5 sm:gap-3 mb-4 flex-wrap">
-          {steps.map((s, i) => (
-            <div key={s} className="flex items-center gap-1.5">
-              <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${currentStep === s ? 'bg-primary text-primary-foreground' : steps.indexOf(currentStep) > i ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'}`}>
-                {steps.indexOf(currentStep) > i ? <CheckCircle2 className="h-4 w-4" /> : `${i + 1}`}
-              </div>
-              <span className={currentStep === s ? 'font-semibold text-xs' : 'text-xs text-muted-foreground'}>{stepLabels[i]}</span>
-              {i < steps.length - 1 && <ChevronRight className="h-4 w-4 text-muted-foreground" />}
-            </div>
-          ))}
-        </div>
-      </div>
+    <div className="min-h-screen bg-paper">
+      <div className="container-page max-w-6xl pb-16 pt-7">
+        <div className="border-b border-line pb-5">
+          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.3em] text-ink-subtle">
+            <Link href="/cart" className="transition-colors hover:text-ink">Bag</Link>
+            <span aria-hidden className="opacity-40">/</span>
+            <span className="text-ink">Checkout</span>
+          </div>
+          <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
+            <h1 className="text-[22px] font-extrabold tracking-tight text-ink sm:text-[26px]">
+              {currentStep === 'confirmation' ? 'Order confirmed' : 'Secure checkout'}
+            </h1>
+            <p className="text-[10.5px] uppercase tracking-[0.16em] text-ink-subtle">
+              Encrypted · no card data stored
+            </p>
+          </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          <ol className="mt-4 flex items-center gap-2">
+            {steps.map((s, i) => {
+              const done = steps.indexOf(currentStep) > i;
+              const active = currentStep === s;
+              return (
+                <li key={s} className="flex flex-1 items-center gap-2">
+                  <span
+                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[10px] font-bold transition-colors ${
+                      active
+                        ? 'border-ink bg-ink text-white'
+                        : done
+                          ? 'border-[rgb(var(--color-success))] bg-[rgb(var(--color-success))] text-white'
+                          : 'border-line bg-white text-ink-subtle'
+                    }`}
+                  >
+                    {done ? <CheckCircle2 className="h-3.5 w-3.5" /> : i + 1}
+                  </span>
+                  <span className={`hidden text-[11px] font-semibold sm:block ${active ? 'text-ink' : 'text-ink-subtle'}`}>
+                    {stepLabels[i]}
+                  </span>
+                  {i < steps.length - 1 && (
+                    <span className={`h-px flex-1 transition-colors ${done ? 'bg-[rgb(var(--color-success))]/60' : 'bg-line'}`} />
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+        </div>
+
+      <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-x-9 gap-y-6">
         <div className="lg:col-span-2 space-y-4">
           {currentStep === 'address' && (
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-base"><MapPin className="h-4 w-4" /> Shipping Address</CardTitle>
+                <CardTitle className="flex items-center gap-2 text-[13px] font-bold uppercase tracking-[0.14em]"><MapPin className="h-3.5 w-3.5" /> Shipping address</CardTitle>
                 <CardDescription className="text-xs">{isGuest ? 'Guest checkout — no login needed. Track via OTP on your mobile.' : 'Select or enter a shipping address'}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 pt-0">
@@ -553,7 +585,7 @@ export default function CheckoutClient() {
           {currentStep === 'payment' && (
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-base"><CreditCard className="h-4 w-4" /> Payment Method</CardTitle>
+                <CardTitle className="flex items-center gap-2 text-[13px] font-bold uppercase tracking-[0.14em]"><CreditCard className="h-3.5 w-3.5" /> Payment method</CardTitle>
                 <CardDescription className="text-xs">UPI / Cards via Razorpay, or COD with confirmation advance</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 pt-0">
@@ -595,7 +627,7 @@ export default function CheckoutClient() {
 
           {currentStep === 'review' && (
             <Card>
-              <CardHeader className="pb-3"><CardTitle className="text-base">Review Your Order</CardTitle><CardDescription className="text-xs">Payment: {paymentMethod.toUpperCase()}{paymentMethod === 'cod' && codQuote && codQuote.advance > 0 ? ` — advance ${formatPrice(codQuote.advance)}, balance ${formatPrice(codQuote.balance)}` : ''}</CardDescription></CardHeader>
+              <CardHeader className="pb-3"><CardTitle className="text-[13px] font-bold uppercase tracking-[0.14em]">Review your order</CardTitle><CardDescription className="text-xs">Payment: {paymentMethod.toUpperCase()}{paymentMethod === 'cod' && codQuote && codQuote.advance > 0 ? ` — advance ${formatPrice(codQuote.advance)}, balance ${formatPrice(codQuote.balance)}` : ''}</CardDescription></CardHeader>
               <CardContent className="space-y-4 pt-0">
                 {(() => {
                   const addr = useNewAddress
@@ -634,7 +666,7 @@ export default function CheckoutClient() {
                 )}
                 <div className="flex gap-2.5">
                   <Button variant="outline" onClick={() => setCurrentStep('payment')}><ArrowLeft className="h-4 w-4 mr-2" />Back</Button>
-                  <Button onClick={handlePlaceOrder} disabled={loading || paying || shippingUnavailable} className="flex-1 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black">
+                  <Button onClick={handlePlaceOrder} disabled={loading || paying || shippingUnavailable} className="h-11 flex-1 rounded-full bg-ink text-[12px] font-bold uppercase tracking-[0.16em] text-white hover:bg-ink/90">
                     {(loading || paying) ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />{paying ? 'Waiting for Razorpay…' : 'Placing Order...'}</> : <>{paymentMethod === 'cod' ? 'Place COD Order' : 'Pay & Place Order'}<ChevronRight className="h-4 w-4 ml-2" /></>}
                   </Button>
                 </div>
@@ -723,8 +755,8 @@ export default function CheckoutClient() {
 
         {(currentStep === 'address' || currentStep === 'payment' || currentStep === 'review') && (
           <div className="lg:col-span-1">
-            <Card className="sticky top-4">
-              <CardHeader className="pb-3"><CardTitle className="text-base">Order Summary</CardTitle></CardHeader>
+            <Card className="sticky top-24 rounded-[20px] border-line shadow-soft">
+              <CardHeader className="pb-3"><CardTitle className="text-[11px] font-extrabold uppercase tracking-[0.24em] text-ink-subtle">Order summary</CardTitle></CardHeader>
               <CardContent className="space-y-3 pt-0">
                 <div className="space-y-3">
                   {effItems.map((item, index) => (
@@ -812,6 +844,7 @@ export default function CheckoutClient() {
             </Card>
           </div>
         )}
+      </div>
       </div>
     </div>
   );

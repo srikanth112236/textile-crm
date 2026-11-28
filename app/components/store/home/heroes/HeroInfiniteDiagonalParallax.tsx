@@ -46,7 +46,7 @@ export function HeroInfiniteDiagonalParallax() {
             <p className="text-xs font-mono font-bold tracking-widest text-slate-400 uppercase">
               NEW SEASON 2026 // CAPSULE 02
             </p>
-            <h2 className="text-3xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-white uppercase leading-none">
+            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-white uppercase leading-none">
               WEAR
             </h2>
 
@@ -59,7 +59,7 @@ export function HeroInfiniteDiagonalParallax() {
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: 15 }}
                   transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-                  className="font-serif italic text-3xl sm:text-5xl lg:text-6xl font-bold text-[#c6f03d] leading-none"
+                  className="font-serif italic text-2xl sm:text-3xl lg:text-4xl font-bold text-[#c6f03d] leading-none"
                 >
                   {currentWord}.
                 </motion.span>

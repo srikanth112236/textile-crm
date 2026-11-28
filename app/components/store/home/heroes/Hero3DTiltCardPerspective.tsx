@@ -46,7 +46,7 @@ export function Hero3DTiltCardPerspective() {
             <span>Aceternity 07 · 3D Parallax Gyroscope</span>
           </div>
 
-          <h2 className="text-4xl sm:text-6xl font-extrabold tracking-tight text-white leading-[1.05]">
+          <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white leading-[1.05]">
             TAILORED IN 3D.<br />
             <span className="bg-gradient-to-r from-[#c6f03d] to-emerald-400 bg-clip-text text-transparent">
               EXPERIENCED IN MOTION.

@@ -51,7 +51,7 @@ export function ElevateEverydayStyle() {
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(#3a342d_1px,transparent_1px)] [background-size:16px_16px] opacity-40" />
 
             <div className="relative z-10 space-y-3">
-              <h2 className="text-3xl sm:text-4xl lg:text-[42px] font-extrabold leading-[1.08] tracking-tight text-[#e59b7b]">
+              <h2 className="text-2xl sm:text-3xl lg:text-[42px] font-extrabold leading-[1.08] tracking-tight text-[#e59b7b]">
                 Elevate Your<br />Everyday Style
               </h2>
               <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#d6b7a5] max-w-sm">

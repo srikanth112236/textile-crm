@@ -51,7 +51,7 @@ export function HeroKineticTypographyParallax() {
     <section className="relative overflow-hidden rounded-[36px] border border-line bg-[#fcfbf8] p-6 sm:p-12 shadow-sm">
       {/* Background Kinetic Marquee Watermark */}
       <div className="pointer-events-none absolute -top-8 inset-x-0 overflow-hidden opacity-5 select-none whitespace-nowrap">
-        <span className="text-[120px] font-black uppercase tracking-tighter text-ink animate-marquee">
+        <span className="text-[76px] font-black uppercase tracking-tighter text-ink animate-marquee">
           MENTOOS LUXURY MENSWEAR · OVERSIZED DROPS · FRENCH LINEN · MENTOOS LUXURY MENSWEAR ·
         </span>
       </div>
@@ -69,7 +69,7 @@ export function HeroKineticTypographyParallax() {
               <p className="text-xs font-mono font-bold tracking-widest text-ink-muted uppercase">
                 TAILORED FOR THE MODERN PHYSIQUE
               </p>
-              <h2 className="text-3xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-ink uppercase leading-none">
+              <h2 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-ink uppercase leading-none">
                 ENGINEERED TO
               </h2>
 
@@ -81,7 +81,7 @@ export function HeroKineticTypographyParallax() {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -20 }}
                     transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-                    className="font-serif italic text-4xl sm:text-6xl lg:text-7xl font-bold text-amber-800 leading-none"
+                    className="font-serif italic text-3xl sm:text-4xl lg:text-5xl font-bold text-amber-800 leading-none"
                   >
                     {currentVerb}.
                   </motion.span>

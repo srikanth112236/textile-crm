@@ -58,7 +58,7 @@ const MOCK_NEW_ARRIVALS: IProduct[] = [
     description: 'Hand-abraded indigo wash with custom metallic hardware and relaxed chest drop.',
     price: 2199,
     compareAtPrice: 3299,
-    images: [{ url: 'https://images.unsplash.com/photo-1542272604-780c96856592?auto=format&fit=crop&w=700&q=80', isDefault: true }],
+    images: [{ url: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=700&q=80', isDefault: true }],
     category: { _id: 'cat-3', name: 'Jackets', slug: 'jackets' },
     status: 'active',
     sku: 'DNM-JKT-03',

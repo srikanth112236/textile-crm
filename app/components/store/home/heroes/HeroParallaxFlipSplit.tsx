@@ -58,12 +58,12 @@ export function HeroParallaxFlipSplit() {
           </div>
 
           <div className="space-y-1">
-            <h2 className="text-3xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-ink uppercase leading-none">
+            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-ink uppercase leading-none">
               REDEFINING MENSWEAR
             </h2>
 
             {/* Flip Word Element */}
-            <div className="h-14 sm:h-20 flex items-center">
+            <div className="h-11 sm:h-16 flex items-center">
               <AnimatePresence mode="wait">
                 <motion.span
                   key={currentWord}
@@ -71,7 +71,7 @@ export function HeroParallaxFlipSplit() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -18 }}
                   transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-                  className="font-serif italic text-4xl sm:text-6xl lg:text-7xl font-bold text-amber-700 leading-none"
+                  className="font-serif italic text-3xl sm:text-4xl lg:text-5xl font-bold text-amber-700 leading-none"
                 >
                   {currentWord}.
                 </motion.span>

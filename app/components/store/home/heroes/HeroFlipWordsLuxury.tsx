@@ -40,7 +40,7 @@ export function HeroFlipWordsLuxury() {
           </div>
 
           <div className="space-y-1">
-            <h2 className="text-3xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-ink uppercase">
+            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-ink uppercase">
               ELEVATE YOUR
             </h2>
 
@@ -53,7 +53,7 @@ export function HeroFlipWordsLuxury() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -15 }}
                   transition={{ duration: 0.35, ease: 'easeInOut' }}
-                  className="font-serif italic text-4xl sm:text-6xl lg:text-7xl font-bold text-amber-700 leading-none"
+                  className="font-serif italic text-3xl sm:text-4xl lg:text-5xl font-bold text-amber-700 leading-none"
                 >
                   {currentWord}.
                 </motion.span>

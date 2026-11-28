@@ -38,7 +38,7 @@ export function HeroMeteorShowerDark() {
           <span>Aceternity 09 · Midnight Meteor Shower</span>
         </div>
 
-        <h2 className="text-4xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight text-white uppercase leading-[1.05]">
+        <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-white uppercase leading-[1.05]">
           CRAFTED UNDER THE{' '}
           <span className="bg-gradient-to-r from-amber-200 via-amber-400 to-orange-400 bg-clip-text text-transparent">
             MIDNIGHT SKY

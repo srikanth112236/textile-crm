@@ -1,6 +1,6 @@
 import React from 'react';
 import type { Metadata } from 'next';
-import { Demo2Page } from '@/components/home/demo-2/Demo2Page';
+import Demo2Page from '@/components/home/demo-2/Demo2Page';
 
 export const metadata: Metadata = {
   title: 'Mentoos · Brutalist Atelier · Specification Sheet 2.0',

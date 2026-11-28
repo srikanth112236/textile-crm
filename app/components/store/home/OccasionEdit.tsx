@@ -28,7 +28,7 @@ export function OccasionEdit() {
           <p className="flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-[0.16em] text-amber-300">
             <Sparkles className="h-3.5 w-3.5" /> Dress for the moment
           </p>
-          <h2 className="mt-2 text-3xl font-extrabold leading-[1.02] tracking-[-0.035em] sm:text-4xl">
+          <h2 className="mt-2 text-2xl font-extrabold leading-[1.02] tracking-[-0.035em] sm:text-3xl">
             ONE WARDROBE.<br />EVERY OCCASION.
           </h2>
           <p className="mt-3 max-w-md text-sm leading-relaxed text-paper/65">
